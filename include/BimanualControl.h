@@ -20,7 +20,7 @@
 #include <QPSolver.h>                                                                               // For control optimisation
 #include <yarp/os/PeriodicThread.h>                                                                 // Class for timing control loops
 
-class iCubBase : public QPSolver<double>,
+class BimanualControl : public QPSolver<double>,
 		 public yarp::os::PeriodicThread
 {
 	public:
@@ -30,9 +30,9 @@ class iCubBase : public QPSolver<double>,
 		 * @param jointList  The list of joints to control, in order
 		 * @param portList   The names of the YARP ports for the joints
 		 */
-		iCubBase(const std::string              &pathToURDF,
-			 const std::vector<std::string> &jointList,
-		         const std::vector<std::string> &portList)
+		BimanualControl(const std::string              &pathToURDF,
+			        const std::vector<std::string> &jointList,
+		                const std::vector<std::string> &portList);
 
 		/**
 		 * Reads the joint position and updates the forward kinematics.
@@ -157,14 +157,28 @@ class iCubBase : public QPSolver<double>,
 		 * @return Returns true if there were no problems.
 		 */
 		bool move_object(const std::vector<Eigen::Isometry3d> &poses, const std::vector<double> &times);
+		
+		/**
+		 * Return the current pose of the specified hand.
+		 * @param which The name of the hand, should be either "left" or "right"
+		 * @return Hand pose represented by an Eigen::Isometry3d object
+		 */
+		Eigen::Isometry3d hand_pose(const std::string &which);
+		
+		/**
+		 * Return the pose of an object being grasped
+		 */
+		Eigen::Isometry3d object_pose() const { return this->global2Object; }
 
 	private:
+	
+		unsigned int numJoints;
 		
 		bool isFinished = true;                                                             ///< For regulating control actions	
 		
 		double startTime, endTime;                                                          ///< For regulating the control loop
 			
-		std::vector<double> jointPos, jointVel;
+		std::vector<double> jointPos, jointVel, jointRef;
 				
 		Eigen::MatrixXd Jleft;                                                              ///< The left hand Jacobian matrix
 		Eigen::MatrixXd Jright;                                                             ///< The right hand Jacobian matrix
@@ -178,7 +192,6 @@ class iCubBase : public QPSolver<double>,
 		
 		std::vector<iDynTree::CubicSpline> jointTrajectory;                                 ///< Use for trajectory tracking of the joints
 		
-		double _cbfScalar = 10;                                                             ///< Scalar on the control barrier function (CBF) for singularity avoidance.
 		double _limit = 0.001;                                                              ///< Minimum value for the manipulability
 		
 		CartesianTrajectory leftTrajectory;                                                 ///< Left hand trajectory generator
@@ -189,9 +202,15 @@ class iCubBase : public QPSolver<double>,
 		
 		Eigen::Isometry3d rightPose;                                                        ///< The pose of the right hand
 		
+		Eigen::Isometry3d global2Object;                                                    ///< (Desired) pose of the object in the world frame
+		
+		Eigen::Isometry3d leftHand2Object;
+		
 		bool isGrasping = false;                                                            ///< Used to check which control method to use
 		
 		CartesianTrajectory payloadTrajectory;                                              ///< Trajectory generator for a grasped object
+		
+		MotorControl motorController;                                                       ///< Communicates with the joint motors on the robot
 		
 		/**
 		 * Specifies joint control mode, or Cartesian control mode.

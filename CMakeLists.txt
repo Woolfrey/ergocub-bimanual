@@ -8,6 +8,26 @@ if(NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE Release)                                                               # Release = Optimised
 endif()
 
+#################################### Download QPSolver #############################################
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/include/QPSolver.h")
+	message([STATUS] " Found the QPSolver class in ${CMAKE_SOURCE_DIR}/include/")
+else()
+	message([WARNING] " QPSolver class not found in ${CMAKE_SOURCE_DIR}/include/")
+	
+	message([STATUS] " Downloading from https://github.com/Woolfrey/SimpleQPSolver ...")
+	
+	file(DOWNLOAD
+	    https://raw.githubusercontent.com/Woolfrey/SimpleQPSolver/master/include/QPSolver.h
+	    ${CMAKE_SOURCE_DIR}/include/QPSolver.h)
+	    
+	if(EXISTS "${CMAKE_SOURCE_DIR}/include/QPSolver.h")
+		message([STATUS] " ... Done!")
+	else()
+		message([FATAL ERROR] " Could not download QPSolver.")
+	endif()
+endif()
+
 ################################## Necessary packages to compile ###################################
 find_package(Eigen3 REQUIRED)
 #find_package(ICUB REQUIRED)                                                                        # Links below to ICUB::iKin
@@ -28,8 +48,8 @@ add_subdirectory(interface)                                                     
 include_directories(include)                                                                        # Location of header files
 
 #################################### Executables to be compiled ####################################
-add_executable(command_server src/CommandServer.cpp src/CommandInterface.cpp src/JointInterface.cpp src/iCubBase.cpp src/ForceControl.cpp src/Utilities.cpp src/QPSolver.cpp src/CartesianTrajectory.cpp src/Payload.cpp)
+add_executable(command_server src/CommandServer.cpp src/CommandInterface.cpp src/BimanualControl.cpp src/MotorControl.cpp src/Utilities.cpp)
 target_link_libraries(command_server Eigen3::Eigen iDynTree::idyntree-high-level ${YARP_LIBRARIES})
 
-add_executable(command_prompt src/CommandPrompt.cpp src/CommandInterface.cpp src/Utilities.cpp)
-target_link_libraries(command_prompt Eigen3::Eigen ${YARP_LIBRARIES})
+#add_executable(command_prompt src/CommandPrompt.cpp src/CommandInterface.cpp src/Utilities.cpp)
+#target_link_libraries(command_prompt Eigen3::Eigen ${YARP_LIBRARIES})
