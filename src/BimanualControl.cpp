@@ -7,10 +7,10 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
                                  const std::vector<std::string> &jointList,
                                  const std::vector<std::string> &portList)
                                  :
+                                 MotorControl(jointList,portList),
                                  yarp::os::PeriodicThread(0.01),                                    // Create thread to run at 100Hz
-                                 J(Eigen::MatrixXd::Zero(12,this->numJoints)),                      // Set the size of the Jacobian matrix
-                                 M(Eigen::MatrixXd::Zero(this->numJoints,this->numJoints)),         // Set the size of the inertia matrix
-                                 MotorControl(jointList,portList)
+                                 J(Eigen::MatrixXd::Zero(12,this->numJoints)),                      // Resize Jacobian
+                                 M(Eigen::MatrixXd::Zero(this->numJoints,this->numJoints))
 {	
 	// Resize vectors based on number of joints
 	this->jointPos.resize(this->numJoints);
@@ -20,21 +20,19 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 	// Set up YARP ports for communication
 	this->desiredJointPos.open("/desiredJointPos");
 	this->jointTrackingError.open("/jointTrackingError");
-
-	iDynTree::ModelLoader loader;
 	
-	std::string message = "[ERROR] [BIMANUAL CONTROL] Constructor: ";
+	iDynTree::ModelLoader loader;
 	
 	if(not loader.loadReducedModelFromFile(pathToURDF, jointList, "urdf"))
 	{
-		throw std::runtime_error(message + "Could not load model from the path " + pathToURDF + ".");
+		throw std::runtime_error("[ERROR] [BIMANUAL CONTROL] Constructor: "
+		                         "Could not load model from the path " + pathToURDF + ".");
 	}
 	else
 	{
 		iDynTree::Model temp = loader.model();
-		
-		// Add transforms to the center of the hands
 
+		
 		temp.addAdditionalFrameToLink("l_hand_palm", "left",
 		                              iDynTree::Transform(iDynTree::Rotation::RPY(0.0,M_PI/2,0.0),
 		                                                  iDynTree::Position(0, -0.02, -0.05)));
@@ -49,13 +47,15 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 		// Now load the model in to the KinDynComputations class	    
 		if(not this->computer.loadRobotModel(temp))
 		{
-			throw std::runtime_error(message + "Could not generate iDynTree::KinDynComputations object from the model " + loader.model().toString() + ".");
+			throw std::runtime_error("[ERROR] [BIMANUAL CONTROL] Constructor: "
+			                         "Could not generate iDynTree::KinDynComputations object from the model " + loader.model().toString() + ".");
 		}
 		else
 		{
 			this->jointTrajectory.resize(this->numJoints);                              // Trajectory for joint motion control		
 						
-			if(not update_state()) throw std::runtime_error(message + "Unable to read initial joint state from the encoders.");
+			if(not update_state()) throw std::runtime_error("[ERROR] [BIMANUAL CONTROL] Constructor: "
+			                                                "Unable to read initial joint state from the encoders.");
 			
 			std::cout << "[INFO] [BIMANUAL CONTROL] Successfully created iDynTree model from " << pathToURDF << ".\n";
 		}
@@ -735,5 +735,24 @@ bool BimanualControl::activate_grasp()
 		this->leftHand2Object = Eigen::Translation3d(0,-graspWidth/2,0);                    // Assume object is rigidly attached to left hand, along y axis (i.e. toward right hand)
 
 		return true;
+	}
+}
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////
+ //             Release from 'grasp' mode so the hands can move independently again                //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+bool BimanualControl::release_grasp()
+{
+	if(this->isGrasping)
+	{
+		this->isGrasping = false;
+		return true;
+	}
+	else
+	{
+		std::cout << "[INFO] [BIMANUAL CONTROL] release_grasp(): "
+		          << "Not grasping anything!\n";
+		
+		return false;
 	}
 }
