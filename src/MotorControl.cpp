@@ -3,10 +3,10 @@
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                                       Constructor                                              //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-JointInterface::JointInterface(const std::vector<std::string> &jointList,
-                               const std::vector<std::string> &portList)
-                               :
-                               numJoints(jointList.size())                                          // Number of joints equal to size of list
+MotorControl::MotorControl(const std::vector<std::string> &jointList,
+                           const std::vector<std::string> &portList)
+                           :
+                           numJoints(jointList.size())                                              // Number of joints equal to size of list
 {
 	// Resize std::vector objects based on number of joints in the model
 	this->positionLimit.resize(this->numJoints);
@@ -88,7 +88,7 @@ JointInterface::JointInterface(const std::vector<std::string> &jointList,
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                    Read the joint positions and velocities from the encoders                   //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-bool JointInterface::read_encoders(std::vector<double> &pos, std::vector<double> &vel)
+bool MotorControl::read_encoders(std::vector<double> &pos, std::vector<double> &vel)
 {
 	if(pos.size() != this->numJoints or vel.size() != this->numJoints)
 	{
@@ -105,17 +105,15 @@ bool JointInterface::read_encoders(std::vector<double> &pos, std::vector<double>
 		
 		for(int i = 0; i < this->numJoints; i++)
 		{
-			success &= this->encoders->getEncoder     (i, &pos(i));                     // Read joint positions
-			success &= this->encoders->getEncoderSpeed(i, &vel(i));                     // Read joint velocities
+			success &= this->encoders->getEncoder     (i, &pos[i]);                     // Read joint positions
+			success &= this->encoders->getEncoderSpeed(i, &vel[i]);                     // Read joint velocities
+			
+			// Convert to radians
+			pos[i] *= M_PI/180.0;
+			vel[i] *= M_PI/180.0;
 		}
 		
-		if(success)
-		{
-			pos *= M_PI/180.0;                                                          // Convert to radians
-			vel *= M_PI/180.0;                                                          // Convert to radians
-			
-			return true;
-		}
+		if(success) return true;
 		else
 		{
 			std::cerr << "[ERROR] [JOINT INTERFACE] read_encoders(): Could not obtain new encoder values.\n";
@@ -128,7 +126,7 @@ bool JointInterface::read_encoders(std::vector<double> &pos, std::vector<double>
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                                  Send commands to the joint motors                              //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-bool JointInterface::send_joint_commands(const std::vector<double> &commands)
+bool MotorControl::send_joint_commands(const std::vector<double> &commands)
 {
 	if(commands.size() != this->numJoints)
 	{
@@ -142,7 +140,7 @@ bool JointInterface::send_joint_commands(const std::vector<double> &commands)
 	{
 		for(int i = 0; i < this->numJoints; i++)
 		{
-			if(not this->controller->setRefTorque(i,commands[i]))
+			if(not this->controller->setPosition(i,commands[i]))
 			{
 				std::cerr << "[ERROR] [JOINT INTERFACE] send_joint_commands(): "
 				          << "Could not send a command for joint " << i << ".\n";
@@ -158,7 +156,7 @@ bool JointInterface::send_joint_commands(const std::vector<double> &commands)
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                             Close the device interfaces on the robot                           //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void JointInterface::close()
+void MotorControl::close()
 {
 	for(int i = 0; i < this->numJoints; i++) this->mode->setControlMode(i, VOCAB_CM_POSITION);  // Set in position mode to lock the joint
 	

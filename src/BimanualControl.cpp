@@ -8,27 +8,18 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
                                  const std::vector<std::string> &portList)
                                  :
                                  yarp::os::PeriodicThread(0.01),                                    // Create thread to run at 100Hz
-				 numJoints(jointList.size()),
                                  J(Eigen::MatrixXd::Zero(12,this->numJoints)),                      // Set the size of the Jacobian matrix
-                                 M(Eigen::MatrixXd::Zero(this->numJoints,this->numJoints))          // Set the size of the inertia matrix
-{
-	// Try to establish a connection with the motor controllers on the robot
-	try
-	{
-		this->motorController = MotorControl(jointList, portList);
-		
-		std::cout << "[INFO] [BIMANUAL CONTROL] Constructor: "
-		          << "Successfully established communication with the joint motors.\n";
-	}
-	catch(const std::exception &exception)
-	{
-		std::cout << exception.what() << std::endl;
-	}
-	
+                                 M(Eigen::MatrixXd::Zero(this->numJoints,this->numJoints)),         // Set the size of the inertia matrix
+                                 MotorControl(jointList,portList)
+{	
 	// Resize vectors based on number of joints
-	jointPos.resize(this->numJoints);
-	jointVel.resize(this->numJoints);
-	jointRef.resize(this->numJoints);
+	this->jointPos.resize(this->numJoints);
+	this->jointVel.resize(this->numJoints);
+	this->jointRef.resize(this->numJoints);
+	
+	// Set up YARP ports for communication
+	this->desiredJointPos.open("/desiredJointPos");
+	this->jointTrackingError.open("/jointTrackingError");
 
 	iDynTree::ModelLoader loader;
 	
@@ -76,7 +67,7 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 bool BimanualControl::update_state()
 {
-	if(JointInterface::read_encoders(this->jointPos, this->jointVel))
+	if(MotorControl::read_encoders(this->jointPos, this->jointVel))
 	{		
 		// Put data in iDynTree class to compute inverse dynamics
 		// (there is probably a smarter way but I keep getting errors otherwise)
@@ -84,8 +75,8 @@ bool BimanualControl::update_state()
 		iDynTree::VectorDynSize tempVelocity(this->numJoints);
 		for(int i = 0; i < this->numJoints; i++)
 		{
-			tempPosition(i) = this->jointPos(i);
-			tempVelocity(i) = this->jointVel(i);
+			tempPosition(i) = this->jointPos[i];
+			tempVelocity(i) = this->jointVel[i];
 		}
 
 		// Put them in to the iDynTree::KinDynComputations class to solve
@@ -111,7 +102,6 @@ bool BimanualControl::update_state()
 			temp.resize(6+this->numJoints,6+this->numJoints);
 			this->computer.getFreeFloatingMassMatrix(temp);                             // Compute inertia matrix for joints & base
 			this->M = temp.block(6,6,this->numJoints,this->numJoints);                  // Remove floating base
-			this->invM = this->M.partialPivLu().inverse();                              // We will need the inverse later
 			
 			// Update hand poses
 			this->leftPose  = iDynTree_to_Eigen(this->computer.getWorldTransform("left"));
@@ -165,11 +155,7 @@ Eigen::Isometry3d BimanualControl::iDynTree_to_Eigen(const iDynTree::Transform &
 bool BimanualControl::move_to_position(const Eigen::VectorXd &position,
                                        const double &time)
 {
-	if((this->q - position).norm() < 0.5 and this->qdot.norm() < 0.5)
-	{
-		return true;                                                                        // Already there
-	}
-	else if(position.size() != this->numJoints)
+	if(position.size() != this->numJoints)
 	{
 		std::cerr << "[ERROR] [BIMANUAL CONTROL] move_to_position(): "
 			  << "Position vector had " << position.size() << " elements, "
@@ -192,7 +178,7 @@ void BimanualControl::halt()
 {
 	if(isRunning()) stop();                                                                     // Stop any control threads that are running
 	this->isFinished = true;
-	send_joint_commands(this->q);                                                               // Hold current joint positions
+	send_joint_commands(this->jointPos);                                                        // Hold current joint positions
 }
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +209,7 @@ bool BimanualControl::move_to_positions(const std::vector<Eigen::VectorXd> &posi
 			{
 				if(j == 0)
 				{
-					waypoint[j] = this->q[i];                                   // Current position is start point
+					waypoint[j] = this->jointPos[i];                            // Current position is start point
 					t[j] = 0.0;                                                 // Start immediately
 				}
 				else
@@ -256,7 +242,7 @@ bool BimanualControl::move_to_positions(const std::vector<Eigen::VectorXd> &posi
 			
 				return false;
 			}	
-			else this->jointTrajectory[i].setInitialConditions(this->qdot[i],0.0);      // Use the current joint velocity
+			else this->jointTrajectory[i].setInitialConditions(this->jointVel[i],0.0);  // Use the current joint velocity
 		}
 		
 		this->endTime = times.back();                                                       // Assign the end time
@@ -270,8 +256,8 @@ bool BimanualControl::move_to_positions(const std::vector<Eigen::VectorXd> &posi
  //                                Move each hand to a desired pose                                //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 bool BimanualControl::move_to_pose(const Eigen::Isometry3d &desiredLeft,
-                            const Eigen::Isometry3d &desiredRight,
-                            const double &time)
+                                   const Eigen::Isometry3d &desiredRight,
+                                   const double &time)
 {
 	// Put them in to std::vector objects and pass onward
 	std::vector<Eigen::Isometry3d> leftPoses(1,desiredLeft);
@@ -368,6 +354,17 @@ bool BimanualControl::move_object(const Eigen::Isometry3d &pose,
 bool BimanualControl::move_object(const std::vector<Eigen::Isometry3d> &poses,
                                   const std::vector<double> &times)
 {
+	// Variables used in this scope
+	Eigen::Vector<double,6> leftHandTwist = iDynTree::toEigen(this->computer.getFrameVel("left"));
+	Eigen::Vector3d angularVel = leftHandTwist.tail(3);
+
+	Eigen::Isometry3d objectPose = this->leftPose * this->leftHand2Object;
+	
+	Eigen::Vector<double,6> objectTwist;
+	objectTwist.head(3) = leftHandTwist.head(3) + angularVel.cross(objectPose.translation() - leftPose.translation());
+	objectTwist.tail(3) = angularVel;                                  
+
+	
 	if( isRunning() ) stop();                                                                   // Stop any control threads that are running
 	
 	this->controlSpace = cartesian;                                                             // Ensure that we are running in Cartesian mode
@@ -377,12 +374,13 @@ bool BimanualControl::move_object(const std::vector<Eigen::Isometry3d> &poses,
 	t.insert(t.end(),times.begin(),times.end());                                                // Add on the rest of the times
 	
 	// Set up the waypoints for the object
-	std::vector<Eigen::Isometry3d> waypoints; waypoints.push_back( this->payload.pose() );      // First waypoint is current pose
-	waypoints.insert( waypoints.end(), poses.begin(), poses.end() );                            // Add on additional waypoints to the end
+	std::vector<Eigen::Isometry3d> waypoints; waypoints.push_back(objectPose);                  // First waypoint is current pose
+	waypoints.insert(waypoints.end(),poses.begin(),poses.end());                                // Add on additional waypoints
+	
 	
 	try
 	{
-		this->payloadTrajectory = CartesianTrajectory(waypoints, t,this->payload.twist());  // Create new trajectory to follow
+		this->payloadTrajectory = CartesianTrajectory(waypoints, t, objectTwist);           // Create new trajectory to follow
 		
 		this->endTime = times.back();                                                       // Assign the end time
 		
@@ -416,49 +414,6 @@ Eigen::Matrix<double,6,1> BimanualControl::pose_error(const Eigen::Isometry3d &d
 	return error;
 }
  
-  ////////////////////////////////////////////////////////////////////////////////////////////////////
- //                                 Set the Cartesian gains                                        //
-////////////////////////////////////////////////////////////////////////////////////////////////////
-bool BimanualControl::set_cartesian_gains(const double &proportional, const double &derivative)
-{
-	if(proportional < 0 or derivative < 0)
-	{
-		std::cerr << "[ERROR] [BIMANUAL CONTROL] set_cartesian_gains(): "
-		          << "Gains must be positive, but your inputs were " << proportional
-		          << " and " << derivative << ".\n";
-		
-		return false;
-	}
-	else
-	{
-		this->K = proportional*this->gainTemplate;
-		this->D = derivative*this->gainTemplate;
-
-		return true;
-	}
-}
-
-  ////////////////////////////////////////////////////////////////////////////////////////////////////
- //                                    Set the joint gains                                         //
-////////////////////////////////////////////////////////////////////////////////////////////////////
-bool BimanualControl::set_joint_gains(const double &proportional, const double &derivative)
-{
-	if(proportional < 0 or derivative < 0)
-	{
-		std::cerr << "[ERROR] [BIMANUAL CONTROL] set_joint_gains(): "
-		          << "Gains must be positive, but your inputs were " << proportional
-		          << " and " << derivative << ".\n";
-		          
-		return false;
-	}
-	else
-	{
-		this->kp = proportional;
-		this->kd = derivative;
-		
-		return true;
-	}
-}
   
   ///////////////////////////////////////////////////////////////////////////////////////////////////
  //                               Return the pose of a given hand                                 //
@@ -471,42 +426,24 @@ Eigen::Isometry3d BimanualControl::hand_pose(const std::string &which)
 }
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////
- //                 Set the desired joint position when executing Cartesian control               //
-///////////////////////////////////////////////////////////////////////////////////////////////////
-bool BimanualControl::set_desired_joint_position(const Eigen::VectorXd &position)
-{
-	if(position.size() != this->numJoints)
-	{
-		std::cerr << "[ERROR] [BIMANUAL CONTROL] set_desired_joint_position(): "
-		          << "This robot has " << this->numJoints << " joints, but the argument "
-		          << "had " << position.size() << " elements.\n";
-		
-		return false;
-	}
-	else
-	{
-		this->desiredPosition = position;
-		
-		return true;
-	}
-}
-
-  ///////////////////////////////////////////////////////////////////////////////////////////////////
  //               Set the parameters for singularity avoidance (i.e. damped least squares)        //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-bool BimanualControl::set_singularity_limit(const double &_limit)
+bool BimanualControl::set_singularity_avoidance_params(const double &scalar, const double &limit)
 {
-	if(_limit <= 0)
+	if(scalar <= 0 or limit <= 0)
 	{
 		std::cerr << "[ERROR] [BIMANUAL CONTROL] set_singularity_limit(): "
-		          << "Input argument was " << std::to_string(_limit) << " but value must be "
-		          << "greater than zero.\n";
-		
+		          << "Input arguments must be positive. "
+		          << "Scalar argument was " << to_string(scalar) << ", and "
+		          << "limit argument was " << to_string(limit) << ".\n";
+		          
 		return false;
 	}
+
 	else
 	{
-		this->limit = _limit;
+		this->_scalar = scalar;
+		this->_limit  = limit;
 		return true;
 	}
 }
@@ -580,7 +517,7 @@ Eigen::MatrixXd BimanualControl::partial_derivative(const Eigen::MatrixXd &J, co
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                                 Initialise the control thread                                  //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-bool PositionControl::threadInit()
+bool BimanualControl::threadInit()
 {
 	if(isRunning())
 	{
@@ -603,7 +540,7 @@ bool PositionControl::threadInit()
   ///////////////////////////////////////////////////////////////////////////////////////////////////
  //                                     MAIN CONTROL LOOP                                         //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void PositionControl::run()
+void BimanualControl::run()
 {
 	if(update_state())
 	{
@@ -619,7 +556,7 @@ void PositionControl::run()
 			Eigen::VectorXd lowerBound(this->numJoints);                                // Lower limit on joint motion
 			Eigen::VectorXd upperBound(this->numJoints);                                // Upper limit on joint motion
 				
-			for(int i = 0; i < this->numJoints; i++) this->referencePos(i) = this->jointTrajectory[i].evaluatePoint(elapsedTime);
+			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] = this->jointTrajectory[i].evaluatePoint(elapsedTime);
 		}
 		else // this->controlSpace == Cartesian
 		{
@@ -627,7 +564,7 @@ void PositionControl::run()
 			
 			if(this->isGrasping)
 			{
-				this->global2Object = this->payloadTrajectory.get_pose(time);       // Desired pose of the object in global frame
+				this->global2Object = this->payloadTrajectory.get_pose(elapsedTime); // Desired pose of the object in global frame
 				
 				Eigen::Isometry3d global2Left = global2Object*this->leftHand2Object.inverse(); // Assume object is rigidly attached to the left hand
 				
@@ -637,31 +574,27 @@ void PositionControl::run()
 			}
 			else
 			{
-				dx.head(6) = 0.99*this->dt*pose_error(this->leftTrajectory.get_pose(time), this->leftPose); // Difference between desired and actual pose
+				dx.head(6) = 0.99*this->dt*pose_error(this->leftTrajectory.get_pose(elapsedTime), this->leftPose); // Difference between desired and actual pose
 		
-				dx.tail(6) = 0.99*this->dt*pose_error(this->rightTrajectory.get_pose(time), this->rightPose);
+				dx.tail(6) = 0.99*this->dt*pose_error(this->rightTrajectory.get_pose(elapsedTime), this->rightPose); // Difference between desired and actual
 			}
 			
 			// Get the instantaneous limits on the joint motion
 			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
-			for(int i = 0; i < this->numJoints; i++)
-			{
-				compute_control_limits(lowerBound(i),upperBound(i),i);
-			}
+			for(int i = 0; i < this->numJoints; i++) compute_control_limits(lowerBound(i),upperBound(i),i);
 			
 			// Compute the start point for the QP Solver
 			Eigen::VectorXd startPoint = QPSolver::last_solution();
-			
 			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound); // No solution, so start in the middle
 			
 			double manipulability = sqrt((this->J*this->J.transpose()).determinant());  // Proximity to a singularity
 			
-			if(manipulability > this->limit)  
+			if(manipulability > this->_limit)  
 			{
 				// Compute the redundant task for singularity avoidance
 				Eigen::VectorXd redundantTask(this->numJoints);
 				
-				Eigen::Matrix<double,6,6> JJt_left  = (this->Jleft*this->Jleft.transpose()).partiaLPivLu().inverse();
+				Eigen::Matrix<double,6,6> JJt_left  = (this->Jleft*this->Jleft.transpose()).partialPivLu().inverse();
 				Eigen::Matrix<double,6,6> JJt_right = (this->Jright*this->Jright.transpose()).partialPivLu().inverse();
 				
 				for(int i = 0; i < 7; i++)
@@ -669,7 +602,7 @@ void PositionControl::run()
 					// Torso joints
 					if(i < 3)
 					{
-						redundantTask(i) = 0.1*this->jointPos(i);           // Try and keep the torso upright
+						redundantTask(i) = 0.05*this->jointPos[i];          // Try and keep the torso upright
 					}
 					
 					// Left arm; offset by 3 for the torso joints
@@ -683,11 +616,10 @@ void PositionControl::run()
 				
 				try
 				{
-					dq = QPSolver::redundant_least_squares(redundantTask,
-					                                       this->M,
-					                                       dx, this->J,
-					                                       lowerBound, upperBound,
-					                                       startPoint);
+					dq = QPSolver::constrained_least_squares(redundantTask, this->M,
+					                                         this->J, dx,
+					                                         lowerBound, upperBound,
+					                                         startPoint);
 				}
 				catch(const std::exception &exception)
 				{
@@ -701,8 +633,11 @@ void PositionControl::run()
 			{
 				try
 				{
-					dq = QPSolver::least_squares(this->M, -this->M*J.transpose()*dx,
-						                     lowerBound, upperBound, startPoint);
+					dq = QPSolver::constrained_least_squares(J.transpose()*dx,
+					                                         Eigen::MatrixXd::Identity(this->numJoints,this->numJoints),
+					                                         this->M,
+					                                         lowerBound, upperBound,
+					                                         startPoint);
 				}
 				catch(const std::exception &exception)
 				{
@@ -712,35 +647,34 @@ void PositionControl::run()
 				}
 			}
 			
-			for(int i = 0; i < this->numJoints; i++) this->referencePos(i) = this->jointPos(i) + dq(i); // Increment the reference position
+			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] = this->jointPos[i] + dq(i); // Increment the reference position
 		}
 		
-		if(not send_joint_commands(this->referencePos)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
+		if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
 		
-		// Publish data for analysis
-		yarp::sig::Vector &referenceVector = this->referencePosition.prepare();
-		yarp::sig::Vector &errorVector     = this->positionError.prepare();
+		// Send data of YARP port
+		yarp::sig::Vector &tempErrorVector = this->jointTrackingError.prepare();
+		yarp::sig::Vector &tempDesiredVector = this->desiredJointPos.prepare();
 		
 		for(int i = 0; i < this->numJoints; i++)
 		{
-			referenceVector.push_back(this->qRef(i));
-			errorVector.push_back(this->qRef(i) - this->q(i));
+			tempErrorVector.push_back(this->jointRef[i] - this->jointPos[i]);
+			tempDesiredVector.push_back(this->jointRef[i]);
 		}
 		
-		this->referencePosition.write();
-		this->positionError.write();
+		this->jointTrackingError.write();
+		this->desiredJointPos.write();
 		
-		// Clear for next loop
-		this->referenceVector.clear();
-		this->errorVector.clear();
-		
+		// Clear for the next loop
+		tempErrorVector.clear();
+		tempDesiredVector.clear();		
 	}
 }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                             Executed after a control thread is stopped                         //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void PositionControl::threadRelease()
+void BimanualControl::threadRelease()
 {
 	send_joint_commands(this->jointPos);                                                        // Maintain current joint positions
 }
@@ -748,7 +682,7 @@ void PositionControl::threadRelease()
   ////////////////////////////////////////////////////////////////////////////////////////////////////
  //                             Compute instantenous position limits                               //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-bool PositionControl::compute_control_limits(double &lower, double &upper, const unsigned int &jointNum)
+bool BimanualControl::compute_control_limits(double &lower, double &upper, const unsigned int &jointNum)
 {
 	// NOTE TO FUTURE SELF: Need to compute a limit on the step size dq 
 	
@@ -762,8 +696,8 @@ bool PositionControl::compute_control_limits(double &lower, double &upper, const
 	}
 	else
 	{           
-		 lower = this->positionLimit[jointNum][0] - this->qRef[jointNum];
-		 upper = this->positionLimit[jointNum][1] - this->qRef[jointNum];
+		 lower = this->positionLimit[jointNum][0] - this->jointRef[jointNum];
+		 upper = this->positionLimit[jointNum][1] - this->jointRef[jointNum];
 		
 		if(lower >= upper)
 		{
@@ -775,16 +709,6 @@ bool PositionControl::compute_control_limits(double &lower, double &upper, const
 		}
 		else	return true;
 	}
-}
-
-  ///////////////////////////////////////////////////////////////////////////////////////////////////
- //                               Return the pose of a given hand                                 //
-///////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Isometry3d BimanualControl::hand_pose(const std::string &which)
-{
-	     if(which == "left")  return this->leftPose;
-	else if(which == "right") return this->rightPose;
-	else throw std::invalid_argument("[ERROR] [iCUB BASE] hand_pose(): Expected 'left' or 'right' but the argument was '"+which+"'.");
 }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////

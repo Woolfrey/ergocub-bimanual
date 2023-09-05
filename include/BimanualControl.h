@@ -19,9 +19,11 @@
 #include <MotorControl.h>                                                                           // Class for communicating with joint motors
 #include <QPSolver.h>                                                                               // For control optimisation
 #include <yarp/os/PeriodicThread.h>                                                                 // Class for timing control loops
+#include <yarp/sig/Vector.h>                                                                        // For sending data over YARP ports
 
 class BimanualControl : public QPSolver<double>,
-		 public yarp::os::PeriodicThread
+                        public yarp::os::PeriodicThread,
+                        public MotorControl
 {
 	public:
 		/**
@@ -177,8 +179,12 @@ class BimanualControl : public QPSolver<double>,
 		bool isFinished = true;                                                             ///< For regulating control actions	
 		
 		double startTime, endTime;                                                          ///< For regulating the control loop
+		
+		double dt = 0.01;                                                                   ///< 1/frequency
 			
-		std::vector<double> jointPos, jointVel, jointRef;
+		std::vector<double> jointPos, jointVel, jointRef;                                   ///< Joint state, and reference value for motors
+		
+		yarp::os::BufferedPort<yarp::sig::Vector> desiredJointPos, jointTrackingError;      ///< For sending data over YARP ports
 				
 		Eigen::MatrixXd Jleft;                                                              ///< The left hand Jacobian matrix
 		Eigen::MatrixXd Jright;                                                             ///< The right hand Jacobian matrix
@@ -192,6 +198,8 @@ class BimanualControl : public QPSolver<double>,
 		
 		std::vector<iDynTree::CubicSpline> jointTrajectory;                                 ///< Use for trajectory tracking of the joints
 		
+		double _scalar = 10;                                                                ///< Scalar on singularity barrier (smaller = more conservative)
+		
 		double _limit = 0.001;                                                              ///< Minimum value for the manipulability
 		
 		CartesianTrajectory leftTrajectory;                                                 ///< Left hand trajectory generator
@@ -204,13 +212,13 @@ class BimanualControl : public QPSolver<double>,
 		
 		Eigen::Isometry3d global2Object;                                                    ///< (Desired) pose of the object in the world frame
 		
-		Eigen::Isometry3d leftHand2Object;
+		Eigen::Isometry3d leftHand2Object;                                                  ///< Local transform of the left hand pose to the obect pose
+		
+		Eigen::Isometry3d desiredLeft2Right;                                                ///< Relative pose between hands when grasping an object
 		
 		bool isGrasping = false;                                                            ///< Used to check which control method to use
 		
 		CartesianTrajectory payloadTrajectory;                                              ///< Trajectory generator for a grasped object
-		
-		MotorControl motorController;                                                       ///< Communicates with the joint motors on the robot
 		
 		/**
 		 * Specifies joint control mode, or Cartesian control mode.
@@ -252,17 +260,17 @@ class BimanualControl : public QPSolver<double>,
 		/**
 		 * Initialise the control thread. Overriden from the PeriodicThread class.
 		 */
-		bool threadInit() { return true; }
+		bool threadInit();
 		
 		/**
 		 * Executed after a control thread is stopped. Overridden from the PeriodicThread class.
 		 */
-		void threadRelease() {}
+		void threadRelease();
 		
 		/**
 		 * Executes the main control loop. Overridden from the PeriodicThread class.
 		 */
-                void run() {}
+                void run();
 
 };                                                                                                  // Semicolon needed after class declaration
 

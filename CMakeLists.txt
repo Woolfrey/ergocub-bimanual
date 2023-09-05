@@ -48,7 +48,7 @@ add_subdirectory(interface)                                                     
 include_directories(include)                                                                        # Location of header files
 
 #################################### Executables to be compiled ####################################
-add_executable(command_server src/CommandServer.cpp src/CommandInterface.cpp src/BimanualControl.cpp src/MotorControl.cpp src/Utilities.cpp)
+add_executable(command_server src/CartesianTrajectory.cpp src/CommandServer.cpp src/CommandInterface.cpp src/BimanualControl.cpp src/MotorControl.cpp src/Utilities.cpp)
 target_link_libraries(command_server Eigen3::Eigen iDynTree::idyntree-high-level ${YARP_LIBRARIES})
 
 #add_executable(command_prompt src/CommandPrompt.cpp src/CommandInterface.cpp src/Utilities.cpp)
