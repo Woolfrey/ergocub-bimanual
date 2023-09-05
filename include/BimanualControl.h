@@ -173,8 +173,6 @@ class BimanualControl : public QPSolver<double>,
 		Eigen::Isometry3d object_pose() const { return this->global2Object; }
 
 	private:
-	
-		unsigned int numJoints;
 		
 		bool isFinished = true;                                                             ///< For regulating control actions	
 		
