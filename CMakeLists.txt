@@ -30,17 +30,8 @@ endif()
 
 ################################## Necessary packages to compile ###################################
 find_package(Eigen3 REQUIRED)
-#find_package(ICUB REQUIRED)                                                                        # Links below to ICUB::iKin
 find_package(iDynTree REQUIRED)                                                                     # Links below to iDynTree
 find_package(YARP 3.3.0 REQUIRED)                                                                   # Links below to ${YARP_LIBRARIES}
-
-######################################## iCub related stuff ########################################
-find_package(ICUBcontrib REQUIRED)                                                                  # Mandatory
-list(APPEND CMAKE_MODULE_PATH ${ICUBCONTRIB_MODULE_PATH})                                           # Extend the current search path to load helpers
-include(ICUBcontribHelpers)                                                                         # I don't know what this does
-include(ICUBcontribOptions)                                                                         # I don't know what this does
-#icubcontrib_set_default_prefix()
-icubcontrib_add_uninstall_target()					                            # Enables uninstall
 
 #################################### Other files to be built #######################################
 add_subdirectory(gazebo)                                                                            # Location of other CMakeLists
@@ -48,7 +39,7 @@ add_subdirectory(interface)                                                     
 include_directories(include)                                                                        # Location of header files
 
 #################################### Executables to be compiled ####################################
-add_executable(command_server src/CartesianTrajectory.cpp src/CommandServer.cpp src/CommandInterface.cpp src/BimanualControl.cpp src/MotorControl.cpp src/Utilities.cpp)
+add_executable(command_server src/CartesianTrajectory.cpp src/ControlServer.cpp src/ControlInterface.cpp src/BimanualControl.cpp src/MotorControl.cpp src/Utilities.cpp)
 target_link_libraries(command_server Eigen3::Eigen iDynTree::idyntree-high-level ${YARP_LIBRARIES})
 
 #add_executable(command_prompt src/CommandPrompt.cpp src/CommandInterface.cpp src/Utilities.cpp)
