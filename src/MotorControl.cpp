@@ -34,7 +34,7 @@ MotorControl::MotorControl(const std::vector<std::string> &jointList,
 
 	////////////////////////////////////////////////////////////////////////////////////////////
 	
-	std::string errorMessage = "[ERROR] [JOINT INTERFACE] Constructor: ";
+	std::string errorMessage = "[ERROR] [MOTOR CONTROL] Constructor: ";
 
 	if(not this->driver.open(options)) throw std::runtime_error(errorMessage + "Could not open the device driver.");
 	else
@@ -79,7 +79,7 @@ MotorControl::MotorControl(const std::vector<std::string> &jointList,
 					yarp::os::Time::delay(0.5);                                 // Wait a little bit before trying again
 				}
 				
-				std::cout << "[INFO] [JOINT INTERFACE] Successfully configured the joint motors.\n";
+				std::cout << "[INFO] [MOTOR CONTROL] Successfully configured the joint motors.\n";
 			}
 		}
 	}
@@ -92,7 +92,7 @@ bool MotorControl::read_encoders(std::vector<double> &pos, std::vector<double> &
 {
 	if(pos.size() != this->numJoints or vel.size() != this->numJoints)
 	{
-		std::cerr << "[ERROR] [JOINT INTERFACE] read_encoders(): "
+		std::cerr << "[ERROR] [MOTOR CONTROL] read_encoders(): "
 		          << "There are " << this->numJoints << " joints, but "
 		          << "the position argument had " << pos.size() << " elements and "
 		          << "the velocity argument had " << vel.size() << " elements.\n";
@@ -116,7 +116,7 @@ bool MotorControl::read_encoders(std::vector<double> &pos, std::vector<double> &
 		if(success) return true;
 		else
 		{
-			std::cerr << "[ERROR] [JOINT INTERFACE] read_encoders(): Could not obtain new encoder values.\n";
+			std::cerr << "[ERROR] [MOTOR CONTROL] read_encoders(): Could not obtain new encoder values.\n";
 			
 			return false;
 		}
@@ -130,7 +130,7 @@ bool MotorControl::send_joint_commands(const std::vector<double> &commands)
 {
 	if(commands.size() != this->numJoints)
 	{
-		std::cerr << "[ERROR] [JOINT INTERFACE] send_joint_command(): "
+		std::cerr << "[ERROR] [MOTOR CONTROL] send_joint_command(): "
 		          << "This robot has " << this->numJoints << " active joints but the input "
 		          << "argument had " << commands.size() << " elements.\n";
 		          
@@ -142,7 +142,7 @@ bool MotorControl::send_joint_commands(const std::vector<double> &commands)
 		{
 			if(not this->controller->setPosition(i,commands[i]))
 			{
-				std::cerr << "[ERROR] [JOINT INTERFACE] send_joint_commands(): "
+				std::cerr << "[ERROR] [MOTOR CONTROL] send_joint_commands(): "
 				          << "Could not send a command for joint " << i << ".\n";
 				
 				return false;
