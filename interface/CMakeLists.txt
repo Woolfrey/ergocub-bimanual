@@ -10,7 +10,7 @@ set(generated_libs_dir "${PROJECT_SOURCE_DIR}")                                 
 
 ############################ Invoke YARP IDL macro to generate files ###############################
 
-yarp_idl_to_dir(INPUT_FILES CommandInterface.thrift
+yarp_idl_to_dir(INPUT_FILES ControlInterface.thrift
                 OUTPUT_DIR ${generated_libs_dir}
                 SOURCES_VAR src                                                                     # Location of generated source files
                 HEADERS_VAR include                                                                 # Location of generated header files
