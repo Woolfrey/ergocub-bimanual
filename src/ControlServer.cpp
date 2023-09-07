@@ -474,10 +474,9 @@ int main(int argc, char* argv[])
 		BimanualControl robot(pathToURDF, jointNames, portList);                            // Start up the robot
 		
 		// Set the singularity avoidance parameters
-		// double maxDamping = parameter.findGroup("SINGULARITY_AVOIDANCE").find("maxDamping").asFloat64();
-		// double threshold  = parameter.findGroup("SINGULARITY_AVOIDANCE").find("threshold").asFloat64();
-		// if(not robot.set_singularity_avoidance_params(maxDamping,threshold)) return 1;
-		
+		double limit  = parameter.findGroup("SINGULARITY_AVOIDANCE").find("limit").asFloat64();
+		double scalar = parameter.findGroup("SINGULARITY_AVOIDANCE").find("scalar").asFloat64();
+		if(not robot.set_singularity_avoidance_params(scalar,limit)) return 1;
 		
 		// Establish communication over YARP
 		yarp::os::Network yarp;
