@@ -4,7 +4,7 @@ SERVERNAME="/controlServer"                                                     
 CURRENT_DIR=$(pwd)
 
 # Options
-CONFIG="$CURRENT_DIR/config/ergocub.ini"
+CONFIG="$CURRENT_DIR/config/ergocub_gazebo_sim.ini"
 PORT="/ergocubSim"
 URDF="$CURRENT_DIR/../robotology-superbuild/src/ergocub-software/urdf/ergoCub/robots/ergoCubGazeboV1/model.urdf"
 WORLD="$CURRENT_DIR/gazebo/worlds/ergocub_test.sdf"

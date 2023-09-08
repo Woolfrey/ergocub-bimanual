@@ -139,8 +139,8 @@ bool MotorControl::send_joint_commands(const std::vector<double> &commands)
 	else
 	{
 		for(int i = 0; i < this->numJoints; i++)
-		{
-			if(not this->controller->setPosition(i,commands[i]))
+		{	
+			if(not this->controller->setPosition(i,commands[i]*180/M_PI))               // NOTE: Need to convert to degrees
 			{
 				std::cerr << "[ERROR] [MOTOR CONTROL] send_joint_commands(): "
 				          << "Could not send a command for joint " << i << ".\n";

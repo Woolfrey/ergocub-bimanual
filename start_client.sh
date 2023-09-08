@@ -5,7 +5,7 @@ SERVERNAME="/controlServer"                                                     
 CURRENT_DIR=$(pwd)
 
 # Options
-CONFIG="$CURRENT_DIR/config/ergocub.ini"
+CONFIG="$CURRENT_DIR/config/ergocub_gazebo_sim.ini"
 
 # Window layout:
 

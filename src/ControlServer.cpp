@@ -473,6 +473,11 @@ int main(int argc, char* argv[])
 
 		BimanualControl robot(pathToURDF, jointNames, portList);                            // Start up the robot
 		
+		// Set the gains for the tasks
+		double cartesian = parameter.findGroup("GAINS").find("cartesian").asFloat64();
+		double redundant = parameter.findGroup("GAINS").find("redundant").asFloat64();
+		if(not robot.set_control_gains(cartesian,redundant)) return 1;
+		
 		// Set the singularity avoidance parameters
 		double limit  = parameter.findGroup("SINGULARITY_AVOIDANCE").find("limit").asFloat64();
 		double scalar = parameter.findGroup("SINGULARITY_AVOIDANCE").find("scalar").asFloat64();

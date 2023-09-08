@@ -171,6 +171,14 @@ class BimanualControl : public QPSolver<double>,
 		 * Return the pose of an object being grasped
 		 */
 		Eigen::Isometry3d object_pose() const { return this->global2Object; }
+		
+		/**
+		 * Set the gains for different control tasks.
+		 * @param cartesian The gain when controlling the hands
+		 * @param redundant The gain when reconfiguring the arms in Cartesian mode
+		 * @return Returns true if there were no problems
+		 */
+		 bool set_control_gains(const double &cartesian, const double &redundant);
 
 	private:
 		
@@ -179,6 +187,14 @@ class BimanualControl : public QPSolver<double>,
 		double startTime, endTime;                                                          ///< For regulating the control loop
 		
 		double dt = 0.01;                                                                   ///< 1/frequency
+
+		double barrierScalar = 10.0;                                                        ///< Used for avoiding singular regions
+		
+		double manipulabilityLimit = 0.001;                                                 ///< Minimum value for the manipulability
+		
+		double cartesianScalar = 0.99;                                                      ///< Scalar on Cartesian feedback
+		
+		double redundantScalar = 1e-03;                                                     ///< Scalar on redundant task
 			
 		std::vector<double> jointPos, jointVel, jointRef;                                   ///< Joint state, and reference value for motors
 		
@@ -195,10 +211,6 @@ class BimanualControl : public QPSolver<double>,
 		iDynTree::KinDynComputations computer;                                              ///< Does all the kinematics & dynamics
 		
 		std::vector<iDynTree::CubicSpline> jointTrajectory;                                 ///< Use for trajectory tracking of the joints
-		
-		double _scalar = 10;                                                                ///< Scalar on singularity barrier (smaller = more conservative)
-		
-		double _limit = 0.001;                                                              ///< Minimum value for the manipulability
 		
 		CartesianTrajectory leftTrajectory;                                                 ///< Left hand trajectory generator
 		

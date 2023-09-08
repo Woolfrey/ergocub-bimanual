@@ -271,8 +271,8 @@ bool BimanualControl::move_to_pose(const Eigen::Isometry3d &desiredLeft,
  //                          Move both hands through multiple poses                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 bool BimanualControl::move_to_poses(const std::vector<Eigen::Isometry3d> &left,
-                             const std::vector<Eigen::Isometry3d> &right,
-                             const std::vector<double> &times)
+                                    const std::vector<Eigen::Isometry3d> &right,
+                                    const std::vector<double> &times)
 {
 	if(isRunning()) stop();                                                                     // Stop any control threads that are running
 	this->controlSpace = cartesian;                                                             // Switch to Cartesian control mode
@@ -442,8 +442,8 @@ bool BimanualControl::set_singularity_avoidance_params(const double &scalar, con
 
 	else
 	{
-		this->_scalar = scalar;
-		this->_limit  = limit;
+		this->barrierScalar        = scalar;
+		this->manipulabilityLimit  = limit;
 		return true;
 	}
 }
@@ -548,36 +548,30 @@ void BimanualControl::run()
 		
 		if(elapsedTime > this->endTime) this->isFinished = true;                              
 		
-		Eigen::VectorXd dq(this->numJoints); dq.setZero();                                  // We want to solve for this		
-		
 		if(this->controlSpace == joint)
-		{
-			Eigen::VectorXd desiredPosition(this->numJoints);                           // From the trajectory object
-			Eigen::VectorXd lowerBound(this->numJoints);                                // Lower limit on joint motion
-			Eigen::VectorXd upperBound(this->numJoints);                                // Upper limit on joint motion
-				
+		{		
 			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] = this->jointTrajectory[i].evaluatePoint(elapsedTime);
 		}
 		else // this->controlSpace == Cartesian
 		{
+			Eigen::VectorXd dq(this->numJoints); dq.setZero();                          // We want to solve for this		
+		
 			Eigen::VectorXd dx; dx.setZero(12);                                         // Discrete step for the change in hand poses
 			
 			if(this->isGrasping)
 			{
 				this->global2Object = this->payloadTrajectory.get_pose(elapsedTime); // Desired pose of the object in global frame
 				
-				Eigen::Isometry3d global2Left = global2Object*this->leftHand2Object.inverse(); // Assume object is rigidly attached to the left hand
-				
-				dx.head(6) = 0.99*this->dt*pose_error(global2Left,this->leftPose);  // Compute error between current hand pose and future hand pose, scale for stability
-				
-				dx.tail(6) = 0.99*this->dt*pose_error(global2Left*this->desiredLeft2Right,this->rightPose);
+
 			}
 			else
 			{
-				dx.head(6) = 0.99*this->dt*pose_error(this->leftTrajectory.get_pose(elapsedTime), this->leftPose); // Difference between desired and actual pose
-		
-				dx.tail(6) = 0.99*this->dt*pose_error(this->rightTrajectory.get_pose(elapsedTime), this->rightPose); // Difference between desired and actual
+				dx.head(6) = this->dt*pose_error(this->leftTrajectory.get_pose(elapsedTime),  this->leftPose); // Difference between desired and actual pose	
+				
+				dx.tail(6) = this->dt*pose_error(this->rightTrajectory.get_pose(elapsedTime), this->rightPose); // Difference between desired and actual
 			}
+			
+			dx *= this->cartesianScalar;                                                // THIS IS VERY IMPORTANT
 			
 			// Get the instantaneous limits on the joint motion
 			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
@@ -589,7 +583,7 @@ void BimanualControl::run()
 			
 			double manipulability = sqrt((this->J*this->J.transpose()).determinant());  // Proximity to a singularity
 			
-			if(manipulability > this->_limit)  
+			if(manipulability > this->manipulabilityLimit)  
 			{
 				// Compute the redundant task for singularity avoidance
 				Eigen::VectorXd redundantTask(this->numJoints);
@@ -600,60 +594,52 @@ void BimanualControl::run()
 				for(int i = 0; i < 7; i++)
 				{
 					// Torso joints
-					if(i < 3)
-					{
-						redundantTask(i) = 0.05*this->jointPos[i];          // Try and keep the torso upright
-					}
+					if(i < 3) redundantTask(i) = -this->jointPos[i];            // Try and keep the torso upright
 					
 					// Left arm; offset by 3 for the torso joints
-					redundantTask(i+3) = 0.1 * manipulability
+					redundantTask(i+3) = manipulability
 						           * (JJt_left * partial_derivative(this->Jleft,i+3) * this->Jleft.transpose()).trace();
 						           
 					// Right arm; offset by 3+7 = 10 for torso, left arm joints
-					redundantTask(i+10) = 0.1 * manipulability
+					redundantTask(i+10) = manipulability
 						            * (JJt_right * partial_derivative(this->Jright,i+10) * this->Jright.transpose()).trace();					
 				}
 				
+				redundantTask = this->redundantScalar;                              // THIS IS VERY IMPORTANT
+				
 				try
 				{
-					dq = QPSolver::constrained_least_squares(redundantTask, this->M,
-					                                         this->J, dx,
-					                                         lowerBound, upperBound,
-					                                         startPoint);
+					dq = QPSolver::constrained_least_squares(redundantTask, this->M, this->J, dx, lowerBound, upperBound, startPoint);
 				}
 				catch(const std::exception &exception)
 				{
 					std::cout << exception.what() << std::endl;
 					
-					dq.setZero();
+					dq.setZero();                                               // Don't move!
 				}
 				
 			}
 			else // Near singular, assume dq = J'*dx to avoid inversion
 			{
+				/*
 				try
 				{
-					dq = QPSolver::constrained_least_squares(J.transpose()*dx,
-					                                         Eigen::MatrixXd::Identity(this->numJoints,this->numJoints),
-					                                         this->M,
-					                                         lowerBound, upperBound,
-					                                         startPoint);
+					dq = QPSolver::constrained_least_squares(J.transpose()*dx, Eigen::MatrixXd::Identity(this->numJoints,this->numJoints), this->M, lowerBound, upperBound, startPoint);
 				}
 				catch(const std::exception &exception)
 				{
 					std::cout << exception.what() << std::endl;
 					
-					dq.setZero();
+					dq.setZero();                                               // Don't move!
 				}
+				*/
 			}
 			
-			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] = this->jointPos[i] + dq(i); // Increment the reference position
+			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] = this->jointRef[i] + dq(i); // Increment the reference position
 		}
 		
-		if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
-		
 		// Send data of YARP port
-		yarp::sig::Vector &tempErrorVector = this->jointTrackingError.prepare();
+		yarp::sig::Vector &tempErrorVector   = this->jointTrackingError.prepare();
 		yarp::sig::Vector &tempDesiredVector = this->desiredJointPos.prepare();
 		
 		for(int i = 0; i < this->numJoints; i++)
@@ -667,7 +653,9 @@ void BimanualControl::run()
 		
 		// Clear for the next loop
 		tempErrorVector.clear();
-		tempDesiredVector.clear();		
+		tempDesiredVector.clear();
+		
+		if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
 	}
 }
 
@@ -756,3 +744,27 @@ bool BimanualControl::release_grasp()
 		return false;
 	}
 }
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////
+ //                          Set the gains for different control tasks                             //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+bool BimanualControl::set_control_gains(const double &cartesian, const double &redundant)
+{
+	if(cartesian < 0 or cartesian >= 1.0 or redundant < 0 or redundant >= 1.0)
+	{
+		std::cerr << "[ERROR] [BIMANUAL CONTROL] set_control_gains(): "
+		          << "Input arguments were " << cartesian << " and " << redundant << ", "
+		          << "but must be between 0 and 1.\n";
+
+		return false;
+	}
+	else
+	{
+		this->cartesianScalar = cartesian;
+		this->redundantScalar = redundant;
+		
+		return true;
+	}
+}
+
+
