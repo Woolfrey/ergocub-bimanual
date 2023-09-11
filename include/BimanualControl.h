@@ -170,7 +170,7 @@ class BimanualControl : public QPSolver<double>,
 		/**
 		 * Return the pose of an object being grasped
 		 */
-		Eigen::Isometry3d object_pose() const { return this->global2Object; }
+		Eigen::Isometry3d object_pose() const { return this->objectPose; }
 		
 		/**
 		 * Set the gains for different control tasks.
@@ -220,12 +220,12 @@ class BimanualControl : public QPSolver<double>,
 		
 		Eigen::Isometry3d rightPose;                                                        ///< The pose of the right hand
 		
-		Eigen::Isometry3d global2Object;                                                    ///< (Desired) pose of the object in the world frame
+		Eigen::Isometry3d objectPose;                                                       ///< Pose of the object
 		
-		Eigen::Isometry3d leftHand2Object;                                                  ///< Local transform of the left hand pose to the obect pose
+		Eigen::Isometry3d object2Left;                                                      ///< Pose of the left hand relative to the object
 		
-		Eigen::Isometry3d desiredLeft2Right;                                                ///< Relative pose between hands when grasping an object
-		
+		Eigen::Isometry3d object2Right;                                                     ///< Pose of the right hand relative to the object
+
 		bool isGrasping = false;                                                            ///< Used to check which control method to use
 		
 		CartesianTrajectory payloadTrajectory;                                              ///< Trajectory generator for a grasped object
