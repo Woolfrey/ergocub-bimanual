@@ -163,12 +163,10 @@ class ControlServer : public ControlInterface
 				          
 				return false;
 			}
-			else
-			{
-				objectWaypoints = temp->second.waypoints;
-				waypointTimes   = temp->second.times;
-				type            = temp->second.type;
-			}
+
+			objectWaypoints = temp->second.waypoints;
+			waypointTimes   = temp->second.times;
+			type            = temp->second.type;
 			
 			if(type == absolute)
 			{
@@ -180,13 +178,12 @@ class ControlServer : public ControlInterface
 				
 				std::vector<Eigen::Isometry3d> newObjectPoints;
 				
-				newObjectPoints.push_back(this->robot->object_pose()*objectWaypoints[0]);
+				newObjectPoints.push_back(this->robot->object_pose()*objectWaypoints[0]); // Transform pose of first waypoint relative to current object pose
 				
 				for(int i = 1; i < objectWaypoints.size(); i++)
 				{
-					newObjectPoints.push_back(newObjectPoints[i-1]*objectWaypoints[i]);
+					newObjectPoints.push_back(newObjectPoints[i-1]*objectWaypoints[i]); // Transform pose of every subsequent waypoint relative to previous
 				}
-				
 				return this->robot->move_object(newObjectPoints,waypointTimes);
 			}
 		}
@@ -336,7 +333,10 @@ class ControlServer : public ControlInterface
 		/**
 		 * Deactivates grasping mode so the hands can move independently.
 		 */
-		bool deactivate_grasp() { return this->robot->release_grasp(); }
+		bool release()
+		{
+			return this->robot->release_grasp();
+		}
 
 		/**
 		 * Immediately stops the robot moving.

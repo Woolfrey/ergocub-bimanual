@@ -181,6 +181,7 @@ class BimanualControl : public QPSolver<double>,
 		 bool set_control_gains(const double &cartesian, const double &redundant);
 
 	private:
+		bool isGrasping = false;                                                            ///< Used to check which control method to use
 		
 		bool isFinished = true;                                                             ///< For regulating control actions	
 		
@@ -192,7 +193,7 @@ class BimanualControl : public QPSolver<double>,
 		
 		double manipulabilityLimit = 0.001;                                                 ///< Minimum value for the manipulability
 		
-		double cartesianScalar = 0.99;                                                      ///< Scalar on Cartesian feedback
+		double cartesianScalar = 1.0;                                                      ///< Scalar on Cartesian feedback
 		
 		double redundantScalar = 1e-03;                                                     ///< Scalar on redundant task
 			
@@ -201,10 +202,27 @@ class BimanualControl : public QPSolver<double>,
 		yarp::os::BufferedPort<yarp::sig::Vector> desiredJointPos, jointTrackingError;      ///< For sending data over YARP ports
 				
 		Eigen::MatrixXd Jleft;                                                              ///< The left hand Jacobian matrix
+		
 		Eigen::MatrixXd Jright;                                                             ///< The right hand Jacobian matrix
+		
 		Eigen::MatrixXd J;                                                                  ///< The left and right hand Jacobian matrices stacked together                                                          
+
+		Eigen::Matrix<double,6,12> G;                                                       ///< Grasp matrix
+		
+		Eigen::Matrix<double,6,12> C;		                                            ///< Constraint matrix
 		
 		Eigen::MatrixXd M;                                                                  ///< Inertia matrix, used to weight the control
+		
+		Eigen::Matrix<double,6,6> gainTemplate = (Eigen::MatrixXd(6,6) << 1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+						                                  0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+						                                  0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+						                                  0.0, 0.0, 0.0, 0.5, 0.0, 0.0,
+						                                  0.0, 0.0, 0.0, 0.0, 0.5, 0.0,
+						                                  0.0, 0.0, 0.0, 0.0, 0.0, 0.5).finished();  
+						                                                                    
+		Eigen::Matrix<double,6,6> K = 1.0*this->gainTemplate;
+		
+		Eigen::VectorXd midPoint;                                                           ///< Halfway between joint limits
 		
 		iDynTree::Transform basePose;                                                       ///< Needed by the iKinDynComputations class
 		
@@ -216,19 +234,15 @@ class BimanualControl : public QPSolver<double>,
 		
 		CartesianTrajectory rightTrajectory;                                                ///< Right hand trajectory generator
 		
+		CartesianTrajectory objectTrajectory;                                               ///< Trajectory generator for a grasped object
+		
 		Eigen::Isometry3d leftPose;                                                         ///< The pose of the left hand
 		
 		Eigen::Isometry3d rightPose;                                                        ///< The pose of the right hand
 		
 		Eigen::Isometry3d objectPose;                                                       ///< Pose of the object
 		
-		Eigen::Isometry3d object2Left;                                                      ///< Pose of the left hand relative to the object
-		
-		Eigen::Isometry3d object2Right;                                                     ///< Pose of the right hand relative to the object
-
-		bool isGrasping = false;                                                            ///< Used to check which control method to use
-		
-		CartesianTrajectory payloadTrajectory;                                              ///< Trajectory generator for a grasped object
+		Eigen::Isometry3d leftHand2Object;                                                  ///< Pose of the object relative to left hand
 		
 		/**
 		 * Specifies joint control mode, or Cartesian control mode.

@@ -10,7 +10,7 @@ service ControlInterface
 {
 	bool activate_grasp();                                                                      # Activate grasp constraints
 
-	bool deactivate_grasp();                                                                    # As it says on the label
+	bool release();                                                                             # As it says on the label
 	
 	bool is_finished();                                                                         # Query if the robot has finished moving
 	

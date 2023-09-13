@@ -93,13 +93,13 @@ int main(int argc, char* argv[])
 		}
 		else if(command == "grasp")
 		{
-			output.addString("Mio");
-			client.activate_grasp();
+			if(client.activate_grasp()) output.addString("Mio");
+			else                        output.addString("Problema");
 		}
 		else if(command == "release")
 		{
-			output.addString("Capito");
-			client.deactivate_grasp();
+			if(client.release()) output.addString("Ecco");
+			else                 output.addString("Problema");
 		}
 		else
 		{
@@ -122,7 +122,7 @@ int main(int argc, char* argv[])
 					else output.addString("Problema");
 				}
 				else if(blah->second == 2)
-				{
+				{	
 					if(client.perform_grasp_action(command)) output.addString("Capito");
 					else output.addString("Problema");
 				}
