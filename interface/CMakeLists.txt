@@ -6,14 +6,11 @@
 
 find_package(YARP REQUIRED)                                                                         # Won't work otherwise!
  
-set(generated_libs_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+set(generated_libs_dir "${PROJECT_SOURCE_DIR}")
 
 ############################ Invoke YARP IDL macro to generate files ###############################
 
-# NOTE: HumanState.thrift is built in the other CMakeLists because I'm getting compile errors
-#       for some reason...
-
-yarp_idl_to_dir(INPUT_FILES ControlInterface.thrift
+yarp_idl_to_dir(INPUT_FILES ControlInterface.thrift HumanState.thrift
                 OUTPUT_DIR ${generated_libs_dir}
                 SOURCES_VAR src                                                                     # Location of generated source files
                 HEADERS_VAR include                                                                 # Location of generated header files
