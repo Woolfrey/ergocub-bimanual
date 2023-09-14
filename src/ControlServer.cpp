@@ -423,7 +423,6 @@ int main(int argc, char* argv[])
 		if(not load_joint_configurations(bottle,jointActionMap)) return 1;
 		
 		// Load the left hand actions from the config file
-		
 		bottle->clear(); bottle = parameter.findGroup("CARTESIAN_ACTIONS").find("names").asList(); // Find all the listed names
 		
 		std::vector<std::string> nameList = string_from_bottle(bottle);                     // Convert to vector of strings
@@ -482,6 +481,16 @@ int main(int argc, char* argv[])
 		double limit  = parameter.findGroup("SINGULARITY_AVOIDANCE").find("limit").asFloat64();
 		double scalar = parameter.findGroup("SINGULARITY_AVOIDANCE").find("scalar").asFloat64();
 		if(not robot.set_singularity_avoidance_params(scalar,limit)) return 1;
+		
+		// Set the QP solver parameters
+		std::string method = parameter.findGroup("QP_SOLVER").find("method").asString();
+		double barrierScalar = parameter.findGroup("QP_SOLVER").find("scalar").asFloat64();
+		double tolerance = parameter.findGroup("QP_SOLVER").find("tolerance").asFloat64();
+		
+		if(method == "primal") robot.use_primal();                                          // For the QP Solver
+				
+		if(not robot.set_barrier_scalar(barrierScalar)
+		or not robot.set_tolerance(tolerance)) return 1;
 		
 		// Establish communication over YARP
 		yarp::os::Network yarp;

@@ -10,7 +10,8 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
                                  MotorControl(jointList,portList),
                                  yarp::os::PeriodicThread(0.01),                                    // Create thread to run at 100Hz
                                  J(Eigen::MatrixXd::Zero(12,this->numJoints)),                      // Resize Jacobian
-                                 M(Eigen::MatrixXd::Zero(this->numJoints,this->numJoints))
+                                 M(Eigen::MatrixXd::Zero(this->numJoints,this->numJoints)),
+                                 jointNames(jointList)
 {	
 	// Resize vectors based on number of joints
 	this->jointPos.resize(this->numJoints);
@@ -18,8 +19,9 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 	this->jointRef.resize(this->numJoints);
 	
 	// Set up YARP ports for communication
-	this->desiredJointPos.open("/desiredJointPos");
+	this->jointReferences.open("/jointReferences");
 	this->jointTrackingError.open("/jointTrackingError");
+	this->walkingModuleInterface.open("/bimanualUpperRefs");
 	
 	iDynTree::ModelLoader loader;
 	
@@ -717,6 +719,31 @@ void BimanualControl::run()
 		}
 
 		if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
+		
+		// Set up YARP ports to publish data
+		yarp::sig::Vector &jointRefData   = this->jointReferences.prepare();
+		yarp::sig::Vector &jointErrorData = this->jointTrackingError.prepare();
+		WalkingControllers::YarpUtilities::HumanState &walkingModuleData = this->walkingModuleInterface.prepare();
+		
+		// Clear data to enable new inputs
+		jointRefData.clear();
+		jointErrorData.clear();
+		walkingModuleData.jointNames.clear();
+		walkingModuleData.positions.clear();
+		
+		// Input the data
+		for(int i = 0; i < this->numJoints; i++)
+		{
+			jointRefData.clear();
+			jointErrorData.clear();
+			walkingModuleData.positions.push_back(this->jointRef[i]);
+			walkingModuleData.jointNames.push_back(this->jointNames[i]);
+		}
+		
+		// Write data to the port
+		this->jointReferences.write();
+		this->jointTrackingError.write();
+		this->walkingModuleInterface.write();
 	}
 }
 

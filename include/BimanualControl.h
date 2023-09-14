@@ -18,6 +18,7 @@
 #include <iDynTree/ModelIO/ModelLoader.h>                                                           // Extracts information from URDF
 #include <MotorControl.h>                                                                           // Class for communicating with joint motors
 #include <QPSolver.h>                                                                               // For control optimisation
+#include <WalkingControllers/YarpUtilities/HumanState.h>                                            // Needed to integrate with AMI's walking controller
 #include <yarp/os/PeriodicThread.h>                                                                 // Class for timing control loops
 #include <yarp/sig/Vector.h>                                                                        // For sending data over YARP ports
 
@@ -193,13 +194,23 @@ class BimanualControl : public QPSolver<double>,
 		
 		double manipulabilityLimit = 0.001;                                                 ///< Minimum value for the manipulability
 		
-		double cartesianScalar = 1.0;                                                      ///< Scalar on Cartesian feedback
+		double cartesianScalar = 1.0;                                                       ///< Scalar on Cartesian feedback
 		
 		double redundantScalar = 1e-03;                                                     ///< Scalar on redundant task
-			
-		std::vector<double> jointPos, jointVel, jointRef;                                   ///< Joint state, and reference value for motors
 		
-		yarp::os::BufferedPort<yarp::sig::Vector> desiredJointPos, jointTrackingError;      ///< For sending data over YARP ports
+		std::vector<double> jointPos;                                                       ///< Actual joint state read from joint encoders
+		
+		std::vector<double> jointRef;                                                       ///< Reference positions used for all control
+		
+		std::vector<double> jointVel;                                                       ///< Joint velocities read from joint encoders
+		
+		std::vector<std::string> jointNames;                                                ///< Names of all the joints being controlled
+		
+		yarp::os::BufferedPort<yarp::sig::Vector> jointReferences;                          ///< Data on joint references
+		
+		yarp::os::BufferedPort<yarp::sig::Vector> jointTrackingError;                       ///< For sending performance data over YARP port
+		
+		yarp::os::BufferedPort<WalkingControllers::YarpUtilities::HumanState> walkingModuleInterface; ///< YARP port for interfacing with AMI's walking controller
 				
 		Eigen::MatrixXd Jleft;                                                              ///< The left hand Jacobian matrix
 		
