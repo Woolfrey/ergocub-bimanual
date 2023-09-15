@@ -235,7 +235,7 @@ void BimanualControl::halt()
 {
 	if(isRunning()) stop();                                                                     // Stop any control threads that are running
 	this->isFinished = true;
-	send_joint_commands(this->jointPos);                                                        // Hold current joint positions
+	//send_joint_commands(this->jointPos);                                                        // Hold current joint positions
 }
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -659,12 +659,12 @@ void BimanualControl::run()
 			{
 				Eigen::VectorXd redundantTask(this->numJoints);
 				
-				for(int i = 0; i < this->numJoints; i++)
+				/*for(int i = 0; i < this->numJoints; i++)
 				{
 					redundantTask(i) = this->redundantScalar*(this->midPoint(i)-this->jointRef[i]);
-				}
+				}*/
 				
-				/*
+				
 				// This is to increase manipulability
 				Eigen::Matrix<double,6,6> JJt_left  = (this->Jleft*this->Jleft.transpose()).partialPivLu().inverse();
 				Eigen::Matrix<double,6,6> JJt_right = (this->Jright*this->Jright.transpose()).partialPivLu().inverse();
@@ -683,7 +683,7 @@ void BimanualControl::run()
 					// Right arm = i+10
 					redundantTask(i+10) = manipulability
 						           * (JJt_right * partial_derivative(this->Jright,i+10) * this->Jright.transpose()).trace();					
-				}*/   
+				}  
 				
 				
 				try
@@ -718,7 +718,7 @@ void BimanualControl::run()
 			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] += this->dt*qdot(i);        // Increment the reference position
 		}
 
-		if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
+		// if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
 		
 		// Set up YARP ports to publish data
 		yarp::sig::Vector &jointRefData   = this->jointReferences.prepare();

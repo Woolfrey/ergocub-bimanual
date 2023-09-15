@@ -56,10 +56,10 @@ MotorControl::MotorControl(const std::vector<std::string> &jointList,
 				this->positionLimit[i][1] *= M_PI/180.0;
 				this->velocityLimit[i]    *= M_PI/180.0;
 				
-				if(not this->mode->setControlMode(i,VOCAB_CM_POSITION_DIRECT))
+				/*if(not this->mode->setControlMode(i,VOCAB_CM_POSITION_DIRECT))
 				{
 					throw std::runtime_error(errorMessage + "Unable to set the control mode for joint " + std::to_string(i) + ".");
-				}
+				}*/
 			}
 			
 			// Finally, configure the encoders
