@@ -180,11 +180,19 @@ class BimanualControl : public QPSolver<double>,
 		 * @return Returns true if there were no problems
 		 */
 		 bool set_control_gains(const double &cartesian, const double &redundant);
+		 
+		 /**
+		  * Set the motor control on or off.
+		  * @param active If true, then joint commands will be sent to the motors. Set false if using with walking controller, for example.
+		  */
+		 void motor_control(const bool &active);
 
 	private:
 		bool isGrasping = false;                                                            ///< Used to check which control method to use
 		
-		bool isFinished = true;                                                             ///< For regulating control actions	
+		bool isFinished = true;                                                             ///< For regulating control actions
+		
+		bool motorControlActive = false;                                                    ///< Will send commands to motor control
 		
 		double startTime, endTime;                                                          ///< For regulating the control loop
 		
