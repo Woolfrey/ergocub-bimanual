@@ -472,6 +472,10 @@ int main(int argc, char* argv[])
 
 		BimanualControl robot(pathToURDF, jointNames, portList);                            // Start up the robot
 		
+		// Turn on/off motor control
+		bool active = parameter.find("sending_motor_control").asBool();
+		robot.motor_control(active);
+		
 		// Set the gains for the tasks
 		double cartesian = parameter.findGroup("GAINS").find("cartesian").asFloat64();
 		double redundant = parameter.findGroup("GAINS").find("redundant").asFloat64();
