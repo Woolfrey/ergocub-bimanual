@@ -77,6 +77,8 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 			C.block(3,6,3,3).setZero();
 			C.block(3,9,3,3) = -C.block(0,0,3,3);
 			
+			// Set up the motor controller
+			
 			if(not MotorControl::read_encoders(this->jointRef, this->jointVel))         // Put the current joint values as the start ref position
 			{
 				throw std::runtime_error("[ERROR] [BIMANUAL CONTROL] Constructor: "
@@ -651,7 +653,7 @@ void BimanualControl::run()
 			// Compute the start point for the QP Solver
 			Eigen::VectorXd startPoint = QPSolver::last_solution();
 			
-			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound);                         // No solution, so start in the middle
+			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound); // No solution, so start in the middle
 			
 			double manipulability = sqrt((this->J*this->J.transpose()).determinant());  // Proximity to a singularity
 			
@@ -659,12 +661,7 @@ void BimanualControl::run()
 			{
 				Eigen::VectorXd redundantTask(this->numJoints);
 				
-				for(int i = 0; i < this->numJoints; i++)
-				{
-					redundantTask(i) = this->redundantScalar*(this->midPoint(i)-this->jointRef[i]);
-				}
-				
-				/*
+
 				// This is to increase manipulability
 				Eigen::Matrix<double,6,6> JJt_left  = (this->Jleft*this->Jleft.transpose()).partialPivLu().inverse();
 				Eigen::Matrix<double,6,6> JJt_right = (this->Jright*this->Jright.transpose()).partialPivLu().inverse();
@@ -683,8 +680,9 @@ void BimanualControl::run()
 					// Right arm = i+10
 					redundantTask(i+10) = manipulability
 						           * (JJt_right * partial_derivative(this->Jright,i+10) * this->Jright.transpose()).trace();					
-				}*/   
+				}
 				
+				redundantTask *= this->redundantScalar;                             // Scale it as necessary	
 				
 				try
 				{				
@@ -694,7 +692,6 @@ void BimanualControl::run()
 				{
 					std::cout << exception.what() << std::endl;
 				}
-				
 			}
 			else // Near singular, assume dq = J'*dx to avoid inversion
 			{
@@ -718,7 +715,11 @@ void BimanualControl::run()
 			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] += this->dt*qdot(i);        // Increment the reference position
 		}
 
-		if(not send_joint_commands(this->jointRef)) std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
+
+		if(this->motorControlActive and not send_joint_commands(this->jointRef))
+		{
+			std::cout << "[ERROR] [BIMANUAL CONTROL] Could not send joint commands for some reason.\n";
+		}
 		
 		// Set up YARP ports to publish data
 		yarp::sig::Vector &jointRefData   = this->jointReferences.prepare();
@@ -773,10 +774,10 @@ bool BimanualControl::compute_control_limits(double &lower, double &upper, const
 	else
 	{   		
 		lower = std::max( (this->positionLimit[jointNum][0] - this->jointRef[jointNum])/this->dt, // Distance to lower limit
-		                  -this->velocityLimit[jointNum]);                                  // Maximum (negative) speed
+		                  -this->velocityLimit[jointNum]);                                        // Maximum (negative) speed
 		                
 		upper = std::min( (this->positionLimit[jointNum][1] - this->jointRef[jointNum])/this->dt, // Distance to upper limit
-		                   this->velocityLimit[jointNum]);                           // Maximum speed
+		                   this->velocityLimit[jointNum]);                                        // Maximum speed
 
 		if(lower >= upper)
 		{
@@ -859,4 +860,23 @@ bool BimanualControl::set_control_gains(const double &cartesian, const double &r
 	}
 }
 
-
+  ////////////////////////////////////////////////////////////////////////////////////////////////////
+ //                       Set boolean for sending commands to the motors or not                    //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+void BimanualControl::motor_control(const bool &active)
+{
+	if(active)
+	{
+		this->motorControlActive = true;
+	
+		std::cout << "[INFO] [BIMANUAL CONTROL] motor_control(): "
+		          << "This controller will take control of the joint motors.\n";
+	}
+	else
+	{
+		this->motorControlActive = false;
+		
+		std::cout << "[INFO] [BIMANUAL CONTROL] motor_control(): "
+		          << "Joint commands will NOT be sent to the joint motors.\n";
+	}
+}
