@@ -619,7 +619,7 @@ void BimanualControl::run()
 		}
 		else // this->controlSpace == Cartesian
 		{
-			Eigen::VectorXd qdot(this->numJoints); qdot.setZero();
+			Eigen::VectorXd qdot(this->numJoints); qdot.setZero();                      // We want to solve for this
 		
 			// Compute the desired hand velocities and convert
 			// to a discrete time step		
@@ -646,6 +646,87 @@ void BimanualControl::run()
 				xdot.tail(6) = vel + this->K*pose_error(pose,this->rightPose);
 			}
 	
+			// Compute redundant task, joint limits
+			
+			Eigen::Matrix<double,6,6> JJTleft  = this->Jleft*this->Jleft.transpose();
+			Eigen::Matrix<double,6,6> JJTright = this->Jright*this->Jright.transpose();
+			
+			Eigen::LDLT<Eigen::Matrix<double,6,6>> JJTleft_decomp(JJTleft);
+			Eigen::LDLT<Eigen::Matrix<double,6,6>> JJTright_decomp(JJTright);
+			
+			double m_left  = sqrt(JJTleft.determinant());
+			double m_right = sqrt(JJTright.determinant());
+			
+			Eigen::VectorXd dmdq_left(this->numJoints); dmdq_left.setZero();
+			Eigen::VectorXd dmdq_right(this->numJoints); dmdq_right.setZero();
+			
+			Eigen::VectorXd redundantTask(this->numJoints); redundantTask.setZero();
+			
+			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
+			
+			for(int i = 0; i < this->numJoints; i++)
+			{
+				compute_control_limits(lowerBound(i), upperBound(i), i);            // Instantaneous limits on joint motion
+				
+				// Compute gradient of manipulability for each arm
+				if(i > 0)
+				{			
+					dmdq_left(i) = m_left   * (JJTleft_decomp.solve( partial_derivative(this->Jleft,i)*this->Jleft.transpose() )).trace();
+					
+					dmdq_right(i) = m_right * (JJTright_decomp.solve( partial_derivative(this->Jright,i)*this->Jright.transpose() )).trace();
+				}
+				
+				// Formulate redundant task
+				if(i < 3)	redundantTask(i) = -this->jointRef[i];              // Drive torso joints to zero
+				else if(i < 10) redundantTask(i) = dmdq_left(i);                    // Increase manipulability of left arm
+				else		redundantTask(i) = dmdq_right(i);                   // Increase manipulability of right arm
+			}
+			
+			// Set up constraints for QP solver
+			
+			Eigen::MatrixXd B(2*this->numJoints+2,this->numJoints);
+			B.block(0,0,this->numJoints,this->numJoints).setIdentity();
+			B.block(this->numJoints,0,this->numJoints,this->numJoints) = -Eigen::MatrixXd::Identity(this->numJoints,this->numJoints);
+			B.row(2*this->numJoints)   = -dmdq_left.transpose();
+			B.row(2*this->numJoints+1) = -dmdq_right.transpose();
+			
+			Eigen::VectorXd z(2*this->numJoints+2);
+			z.head(this->numJoints) = upperBound;
+			z.block(this->numJoints,0,this->numJoints,1) = -lowerBound;
+			z(2*this->numJoints)   = this->barrierScalar * (m_left - this->manipulabilityLimit);
+			z(2*this->numJoints+1) = this->barrierScalar * (m_right - this->manipulabilityLimit);
+			
+			Eigen::VectorXd startPoint = QPSolver::last_solution();
+			
+			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound);
+			
+			if( std::min(m_left, m_right) > this->manipulabilityLimit )
+			{
+				try
+				{				
+					qdot = QPSolver::constrained_least_squares(redundantTask, this->M, this->J, xdot, B, z, startPoint);
+				}
+				catch(const std::exception &exception)
+				{
+					std::cout << exception.what() << std::endl;
+				}
+			}
+			
+			if(this->isGrasping) // Re-solve the QP problem subject to grasp constraints
+			{	
+			 	Eigen::MatrixXd Jc = this->C*this->J;                               // Constraint Jacobian
+			 	
+				try // Too easy lol ᕙ(▀̿̿ĺ̯̿̿▀̿ ̿) ᕗ
+				{
+					qdot = QPSolver::constrained_least_squares(qdot, this->M,  Jc, Eigen::VectorXd::Zero(6), lowerBound, upperBound, qdot);
+				}
+				catch(const std::exception &exception)
+				{
+					std::cout << exception.what() << std::endl;
+				}
+			}
+			
+			/*
 			// Get the instantaneous limits on the joint motion
 			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
 			for(int i = 0; i < this->numJoints; i++) compute_control_limits(lowerBound(i),upperBound(i),i);
@@ -661,7 +742,6 @@ void BimanualControl::run()
 			{
 				Eigen::VectorXd redundantTask(this->numJoints);
 				
-
 				// This is to increase manipulability
 				Eigen::Matrix<double,6,6> JJt_left  = (this->Jleft*this->Jleft.transpose()).partialPivLu().inverse();
 				Eigen::Matrix<double,6,6> JJt_right = (this->Jright*this->Jright.transpose()).partialPivLu().inverse();
@@ -711,6 +791,7 @@ void BimanualControl::run()
 					std::cout << exception.what() << std::endl;
 				}
 			}
+			*/
 			
 			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] += this->dt*qdot(i);        // Increment the reference position
 		}
