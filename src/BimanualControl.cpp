@@ -717,71 +717,9 @@ void BimanualControl::run()
 					std::cout << exception.what() << std::endl;
 				}
 			}
-			
-			if(this->isGrasping) // Re-solve the QP problem subject to grasp constraints
-			{	
-			 	Eigen::MatrixXd Jc = this->C*this->J;                               // Constraint Jacobian
-			 	
-				try // Too easy lol ᕙ(▀̿̿ĺ̯̿̿▀̿ ̿) ᕗ
-				{
-					qdot = QPSolver::constrained_least_squares(qdot, this->M,  Jc, Eigen::VectorXd::Zero(6), lowerBound, upperBound, qdot);
-				}
-				catch(const std::exception &exception)
-				{
-					std::cout << exception.what() << std::endl;
-				}
-			}
-			
-			/*
-			// Get the instantaneous limits on the joint motion
-			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
-			for(int i = 0; i < this->numJoints; i++) compute_control_limits(lowerBound(i),upperBound(i),i);
-
-			// Compute the start point for the QP Solver
-			Eigen::VectorXd startPoint = QPSolver::last_solution();
-			
-			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound); // No solution, so start in the middle
-			
-			double manipulability = sqrt((this->J*this->J.transpose()).determinant());  // Proximity to a singularity
-			
-			if(manipulability > this->manipulabilityLimit)  
+			else
 			{
-				Eigen::VectorXd redundantTask(this->numJoints);
-				
-				// This is to increase manipulability
-				Eigen::Matrix<double,6,6> JJt_left  = (this->Jleft*this->Jleft.transpose()).partialPivLu().inverse();
-				Eigen::Matrix<double,6,6> JJt_right = (this->Jright*this->Jright.transpose()).partialPivLu().inverse();
-				
-				for(int i = 0; i < 7; i++)
-				{
-					if(i < 3) // Torso
-					{
-						redundantTask(i) = -this->jointRef[i]; // Drive torso joints to zero
-					}
-					
-					// Left arm = i+3
-					redundantTask(i+3) = manipulability
-						           * (JJt_left * partial_derivative(this->Jleft,i+3) * this->Jleft.transpose()).trace();					
-					
-					// Right arm = i+10
-					redundantTask(i+10) = manipulability
-						           * (JJt_right * partial_derivative(this->Jright,i+10) * this->Jright.transpose()).trace();					
-				}
-				
-				redundantTask *= this->redundantScalar;                             // Scale it as necessary	
-				
-				try
-				{				
-					qdot = QPSolver::constrained_least_squares(redundantTask, this->M, this->J, xdot, lowerBound, upperBound, startPoint);
-				}
-				catch(const std::exception &exception)
-				{
-					std::cout << exception.what() << std::endl;
-				}
-			}
-			else // Near singular, assume dq = J'*dx to avoid inversion
-			{
-				std::cout << "\n[WARNING] Singular!\n";
+				std::cerr << "[WARNING] [BIMANUAL CONTROL] Near singular!\n";
 			}
 			
 			if(this->isGrasping) // Re-solve the QP problem subject to grasp constraints
@@ -797,7 +735,6 @@ void BimanualControl::run()
 					std::cout << exception.what() << std::endl;
 				}
 			}
-			*/
 			
 			for(int i = 0; i < this->numJoints; i++) this->jointRef[i] += this->dt*qdot(i);        // Increment the reference position
 		}
