@@ -200,6 +200,8 @@ class BimanualControl : public QPSolver<double>,
 
 		double barrierScalar = 10.0;                                                        ///< Used for avoiding singular regions
 		
+		double manipulability;                                                              ///< Proximity to a singular configuration
+		
 		double manipulabilityLimit = 0.001;                                                 ///< Minimum value for the manipulability
 		
 		double cartesianScalar = 1.0;                                                       ///< Scalar on Cartesian feedback
@@ -217,6 +219,12 @@ class BimanualControl : public QPSolver<double>,
 		yarp::os::BufferedPort<yarp::sig::Vector> jointReferences;                          ///< Data on joint references
 		
 		yarp::os::BufferedPort<yarp::sig::Vector> jointTrackingError;                       ///< For sending performance data over YARP port
+		
+		yarp::os::BufferedPort<yarp::sig::Vector> constraintAdherence;                      ///< For measuring how well constraints are enforced
+		
+		yarp::os::BufferedPort<yarp::sig::Vector> objectTrackingError;                      ///< As it says
+		
+		yarp::os::BufferedPort<yarp::sig::Vector> manipulabilityData;                       ///< Minimum manipulability
 		
 		yarp::os::BufferedPort<WalkingControllers::YarpUtilities::HumanState> walkingModuleInterface; ///< YARP port for interfacing with AMI's walking controller
 				
@@ -241,7 +249,7 @@ class BimanualControl : public QPSolver<double>,
 						                                                                    
 		Eigen::Matrix<double,6,6> K = 1.0*this->gainTemplate;
 		
-		Eigen::VectorXd midPoint;                                                           ///< Halfway between joint limits
+		Eigen::Vector<double,6> objectPoseError;                                            ///< For assessing performance
 		
 		iDynTree::Transform basePose;                                                       ///< Needed by the iKinDynComputations class
 		
