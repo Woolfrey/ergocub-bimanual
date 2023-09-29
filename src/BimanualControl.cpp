@@ -657,10 +657,10 @@ void BimanualControl::run()
 			double m_left  = sqrt(JJTleft.determinant());
 			double m_right = sqrt(JJTright.determinant());
 			
-			Eigen::VectorXd dmdq_left(this->numJoints); dmdq_left.setZero();
-			Eigen::VectorXd dmdq_right(this->numJoints); dmdq_right.setZero();
+			Eigen::VectorXd dmdq_left(this->numJoints);
+			Eigen::VectorXd dmdq_right(this->numJoints);
 			
-			Eigen::VectorXd redundantTask(this->numJoints); redundantTask.setZero();
+			Eigen::VectorXd redundantTask(this->numJoints);
 			
 			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
 			
@@ -669,10 +669,14 @@ void BimanualControl::run()
 				compute_control_limits(lowerBound(i), upperBound(i), i);            // Instantaneous limits on joint motion
 				
 				// Compute gradient of manipulability for each arm
-				if(i > 0)
+				if(i == 0)                                                          // First joint does nothing
+				{
+					dmdq_left(i) = 0.0;
+					dmdq_right(i) = 0.0;
+				}
+				else
 				{			
 					dmdq_left(i) = m_left   * (JJTleft_decomp.solve( partial_derivative(this->Jleft,i)*this->Jleft.transpose() )).trace();
-					
 					dmdq_right(i) = m_right * (JJTright_decomp.solve( partial_derivative(this->Jright,i)*this->Jright.transpose() )).trace();
 				}
 				
@@ -681,6 +685,8 @@ void BimanualControl::run()
 				else if(i < 10) redundantTask(i) = dmdq_left(i);                    // Increase manipulability of left arm
 				else		redundantTask(i) = dmdq_right(i);                   // Increase manipulability of right arm
 			}
+			
+			redundantTask *= this->redundantScalar;                                     // Scale to increase/decrease effect
 			
 			// Set up constraints for QP solver
 			
