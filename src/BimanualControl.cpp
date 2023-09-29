@@ -22,6 +22,9 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 	this->jointReferences.open("/jointReferences");
 	this->jointTrackingError.open("/jointTrackingError");
 	this->walkingModuleInterface.open("/bimanualUpperRefs");
+	this->objectTrackingError.open("/objectTrackingError");
+	this->constraintAdherence.open("/constraintAdherence");
+	this->manipulabilityData.open("/manipulability");
 	
 	iDynTree::ModelLoader loader;
 	
@@ -34,7 +37,6 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 	{
 		iDynTree::Model temp = loader.model();
 
-		
 		temp.addAdditionalFrameToLink("l_hand_palm", "left",
 		                              iDynTree::Transform(iDynTree::Rotation::RPY(0.0,M_PI/2,0.0),
 		                                                  iDynTree::Position(0, -0.02, -0.05)));
@@ -55,9 +57,6 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 		else
 		{
 			this->jointTrajectory.resize(this->numJoints);                              // Trajectory for joint motion control
-			
-			this->midPoint.resize(this->numJoints);
-			for(int i = 0; i < this->numJoints; i++) midPoint(i) = 0.5*(this->positionLimit[i][0] + this->positionLimit[i][1]);
 			
 			// G = [    I    0     I    0 ]
 			//     [ S(left) I S(right) I ]
@@ -630,9 +629,11 @@ void BimanualControl::run()
 			
 			if(this->isGrasping)
 			{
-				this->objectTrajectory.get_state(pose,vel,acc,elapsedTime);         // Get the desired object state for the given time              
+				this->objectTrajectory.get_state(pose,vel,acc,elapsedTime);         // Get the desired object state for the given time
 				
-				xdot = this->G.transpose()*(vel + this->K*pose_error(pose,this->objectPose));
+				this->objectPoseError = pose_error(pose,this->objectPose);          // Save this so we can publish it later            
+				
+				xdot = this->G.transpose()*(vel + this->K*this->objectPoseError);
 				
 			}
 			else
@@ -657,11 +658,11 @@ void BimanualControl::run()
 			double m_left  = sqrt(JJTleft.determinant());
 			double m_right = sqrt(JJTright.determinant());
 			
+			this->manipulability = std::min(m_left, m_right);
+			
 			Eigen::VectorXd dmdq_left(this->numJoints);
 			Eigen::VectorXd dmdq_right(this->numJoints);
-			
 			Eigen::VectorXd redundantTask(this->numJoints);
-			
 			Eigen::VectorXd lowerBound(this->numJoints), upperBound(this->numJoints);
 			
 			for(int i = 0; i < this->numJoints; i++)
@@ -671,7 +672,7 @@ void BimanualControl::run()
 				// Compute gradient of manipulability for each arm
 				if(i == 0)                                                          // First joint does nothing
 				{
-					dmdq_left(i) = 0.0;
+					dmdq_left(i)  = 0.0;
 					dmdq_right(i) = 0.0;
 				}
 				else
@@ -697,30 +698,33 @@ void BimanualControl::run()
 			B.row(2*this->numJoints+1) = -dmdq_right.transpose();
 			
 			Eigen::VectorXd z(2*this->numJoints+2);
-			z.head(this->numJoints) = upperBound;
+			z.block(              0,0,this->numJoints,1) =  upperBound;
 			z.block(this->numJoints,0,this->numJoints,1) = -lowerBound;
-			z(2*this->numJoints)   = this->barrierScalar * (m_left - this->manipulabilityLimit);
-			z(2*this->numJoints+1) = this->barrierScalar * (m_right - this->manipulabilityLimit);
 			
-			Eigen::VectorXd startPoint = QPSolver::last_solution();
-			
-			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound);
-			
-			if( std::min(m_left, m_right) > this->manipulabilityLimit )
+			if(this->manipulability >= this->manipulabilityLimit)
 			{
-				try
-				{				
-					qdot = QPSolver::constrained_least_squares(redundantTask, this->M, this->J, xdot, B, z, startPoint);
-				}
-				catch(const std::exception &exception)
-				{
-					std::cout << exception.what() << std::endl;
-				}
+				z(2*this->numJoints)   = this->barrierScalar * (m_left  - this->manipulabilityLimit);
+				z(2*this->numJoints+1) = this->barrierScalar * (m_right - this->manipulabilityLimit);
 			}
 			else
 			{
-				std::cerr << "[WARNING] [BIMANUAL CONTROL] Near singular!\n";
+				z(2*this->numJoints)   = 0;
+				z(2*this->numJoints+1) = 0;
 			}
+			
+			// Need a start point for the QP solver
+			Eigen::VectorXd startPoint = QPSolver::last_solution();
+			if(startPoint.size() != this->numJoints) startPoint = 0.5*(lowerBound + upperBound);
+			
+			try
+			{				
+				qdot = QPSolver::constrained_least_squares(redundantTask, this->M, this->J, xdot, B, z, startPoint);
+			}
+			catch(const std::exception &exception)
+			{
+				std::cout << exception.what() << std::endl;
+			}
+
 			
 			if(this->isGrasping) // Re-solve the QP problem subject to grasp constraints
 			{	
@@ -746,17 +750,22 @@ void BimanualControl::run()
 		}
 		
 		// Set up YARP ports to publish data
+		yarp::sig::Vector &mu = this->manipulabilityData.prepare();
 		yarp::sig::Vector &jointRefData   = this->jointReferences.prepare();
 		yarp::sig::Vector &jointErrorData = this->jointTrackingError.prepare();
 		WalkingControllers::YarpUtilities::HumanState &walkingModuleData = this->walkingModuleInterface.prepare();
 		
 		// Clear data to enable new inputs
+		mu.clear();
 		jointRefData.clear();
 		jointErrorData.clear();
 		walkingModuleData.jointNames.clear();
 		walkingModuleData.positions.clear();
 		
 		// Input the data
+		
+		mu.push_back(this->manipulability);
+		
 		for(int i = 0; i < this->numJoints; i++)
 		{
 			jointRefData.clear();
@@ -769,6 +778,26 @@ void BimanualControl::run()
 		this->jointReferences.write();
 		this->jointTrackingError.write();
 		this->walkingModuleInterface.write();
+		this->manipulabilityData.write();
+		
+		// This is for assessing constraints, etc
+		if(this->isGrasping)
+		{
+			yarp::sig::Vector &constraintData = this->constraintAdherence.prepare();
+			constraintData.clear();
+			Eigen::Vector<double,6> temp = pose_error(this->leftPose, this->rightPose); // Get the pose error between the hands
+			constraintData.push_back(temp.head(3).norm()*1000);                         // Position error in mm
+			constraintData.push_back(temp.tail(3).norm()*180/3.141592);                 // Orientation error in deg
+			
+			this->constraintAdherence.write();
+			
+			yarp::sig::Vector &objectErrorData = this->objectTrackingError.prepare();     
+			objectErrorData.clear();
+			objectErrorData.push_back(this->objectPoseError.head(3).norm()*1000);
+			objectErrorData.push_back(this->objectPoseError.tail(3).norm()*180/3.141592);
+			
+			this->objectTrackingError.write();
+		}
 	}
 }
 
