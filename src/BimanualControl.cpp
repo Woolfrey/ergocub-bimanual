@@ -709,7 +709,7 @@ void BimanualControl::run()
 			else
 			{
 				z(2*this->numJoints) = 0.0;
-				z(2*this->numJoints+1)= 0.0;
+				z(2*this->numJoints+1) = 0.0;
 			}
 			
 			// Need a start point for the QP solver
