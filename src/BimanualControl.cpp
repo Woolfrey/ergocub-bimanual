@@ -682,7 +682,7 @@ void BimanualControl::run()
 				}
 				
 				// Formulate redundant task
-				if(i < 3)	redundantTask(i) = -this->jointRef[i];              // Drive torso joints to zero
+				if(i < 3)	redundantTask(i) = -2*this->jointRef[i];            // Drive torso joints to zero
 				else if(i < 10) redundantTask(i) = dmdq_left(i);                    // Increase manipulability of left arm
 				else		redundantTask(i) = dmdq_right(i);                   // Increase manipulability of right arm
 			}
@@ -701,15 +701,15 @@ void BimanualControl::run()
 			z.block(              0,0,this->numJoints,1) =  upperBound;
 			z.block(this->numJoints,0,this->numJoints,1) = -lowerBound;
 			
-			if(this->manipulability >= this->manipulabilityLimit)
+			if(this->manipulability > this->manipulabilityLimit)
 			{
 				z(2*this->numJoints)   = this->barrierScalar * (m_left  - this->manipulabilityLimit);
 				z(2*this->numJoints+1) = this->barrierScalar * (m_right - this->manipulabilityLimit);
 			}
 			else
 			{
-				z(2*this->numJoints)   = 0;
-				z(2*this->numJoints+1) = 0;
+				z(2*this->numJoints) = 0.0;
+				z(2*this->numJoints+1)= 0.0;
 			}
 			
 			// Need a start point for the QP solver
@@ -732,7 +732,7 @@ void BimanualControl::run()
 			 	
 				try // Too easy lol ᕙ(▀̿̿ĺ̯̿̿▀̿ ̿) ᕗ
 				{
-					qdot = QPSolver::constrained_least_squares(qdot, this->M,  Jc, Eigen::VectorXd::Zero(6), lowerBound, upperBound, qdot);
+					qdot = QPSolver::constrained_least_squares(qdot, this->M,  Jc, Eigen::VectorXd::Zero(6), B, z, qdot);
 				}
 				catch(const std::exception &exception)
 				{
