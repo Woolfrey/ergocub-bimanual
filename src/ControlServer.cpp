@@ -478,8 +478,9 @@ int main(int argc, char* argv[])
 		
 		// Set the gains for the tasks
 		double cartesian = parameter.findGroup("GAINS").find("cartesian").asFloat64();
-		double redundant = parameter.findGroup("GAINS").find("redundant").asFloat64();
-		if(not robot.set_control_gains(cartesian,redundant)) return 1;
+		double redundancy = parameter.findGroup("GAINS").find("redundancy").asFloat64();
+		
+		if(not robot.set_control_gains(cartesian,redundancy)) return 1;
 		
 		// Set the singularity avoidance parameters
 		double limit  = parameter.findGroup("SINGULARITY_AVOIDANCE").find("limit").asFloat64();
@@ -491,7 +492,7 @@ int main(int argc, char* argv[])
 		double barrierScalar = parameter.findGroup("QP_SOLVER").find("scalar").asFloat64();
 		double tolerance = parameter.findGroup("QP_SOLVER").find("tolerance").asFloat64();
 		
-		if(method == "primal") robot.use_primal();                                          // For the QP Solver
+		if(method == "dual") robot.use_dual();                                              // For the QP Solver
 				
 		if(not robot.set_barrier_scalar(barrierScalar)
 		or not robot.set_tolerance(tolerance)) return 1;
