@@ -682,7 +682,7 @@ void BimanualControl::run()
 				}
 				
 				// Formulate redundant task
-				if(i < 3)	redundantTask(i) = -2*this->jointRef[i];            // Drive torso joints to zero
+				if(i < 3)	redundantTask(i) = -this->jointRef[i];              // Drive torso joints to zero
 				else if(i < 10) redundantTask(i) = dmdq_left(i);                    // Increase manipulability of left arm
 				else		redundantTask(i) = dmdq_right(i);                   // Increase manipulability of right arm
 			}

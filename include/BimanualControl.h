@@ -206,7 +206,7 @@ class BimanualControl : public QPSolver<double>,
 		
 		double cartesianScalar = 1.0;                                                       ///< Scalar on Cartesian feedback
 		
-		double redundantScalar = 1e-03;                                                     ///< Scalar on redundant task
+		double redundantScalar = 1.0;                                                       ///< Scalar on redundant task
 		
 		std::vector<double> jointPos;                                                       ///< Actual joint state read from joint encoders
 		
