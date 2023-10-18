@@ -218,7 +218,6 @@ class ControlServer : public ControlInterface
 			{
 				return this->robot->move_to_positions(jointConfig->second.waypoints,
 				                                      jointConfig->second.times);
-				return true;
 			}
 		}
 
