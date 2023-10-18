@@ -768,8 +768,8 @@ void BimanualControl::run()
 		
 		for(int i = 0; i < this->numJoints; i++)
 		{
-			jointRefData.clear();
-			jointErrorData.clear();
+			jointRefData.push_back(this->jointRef[i]);
+			jointErrorData.push_back(this->jointRef[i] - this->jointPos[i]);
 			walkingModuleData.positions.push_back(this->jointRef[i]);
 			walkingModuleData.jointNames.push_back(this->jointNames[i]);
 		}
