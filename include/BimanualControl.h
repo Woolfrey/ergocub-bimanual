@@ -225,7 +225,9 @@ class BimanualControl : public QPSolver<double>,
 		yarp::os::BufferedPort<yarp::sig::Vector> objectTrackingError;                      ///< As it says
 		
 		yarp::os::BufferedPort<yarp::sig::Vector> manipulabilityData;                       ///< Minimum manipulability
-		
+
+		yarp::os::BufferedPort<yarp::os::Bottle> neckYawReferences;							//Port to read neck reference for gaze control
+
 		yarp::os::BufferedPort<WalkingControllers::YarpUtilities::HumanState> walkingModuleInterface; ///< YARP port for interfacing with AMI's walking controller
 				
 		Eigen::MatrixXd Jleft;                                                              ///< The left hand Jacobian matrix

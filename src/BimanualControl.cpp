@@ -25,7 +25,8 @@ BimanualControl::BimanualControl(const std::string              &pathToURDF,
 	this->objectTrackingError.open("/objectTrackingError");
 	this->constraintAdherence.open("/constraintAdherence");
 	this->manipulabilityData.open("/manipulability");
-	
+	this->neckYawReferences.open("/neckYawReferences");
+
 	iDynTree::ModelLoader loader;
 	
 	if(not loader.loadReducedModelFromFile(pathToURDF, jointList, "urdf"))
@@ -754,7 +755,7 @@ void BimanualControl::run()
 		yarp::sig::Vector &jointRefData   = this->jointReferences.prepare();
 		yarp::sig::Vector &jointErrorData = this->jointTrackingError.prepare();
 		WalkingControllers::YarpUtilities::HumanState &walkingModuleData = this->walkingModuleInterface.prepare();
-		
+
 		// Clear data to enable new inputs
 		mu.clear();
 		jointRefData.clear();
@@ -763,7 +764,20 @@ void BimanualControl::run()
 		walkingModuleData.positions.clear();
 		
 		// Input the data
-		
+
+		yarp::os::Bottle *neck_yaw_input = this->neckYawReferences.read();
+		std::string neck_joint_name = "neck_yaw"s;
+		if(neck_yaw_input!=nullptr)
+		{
+			walkingModuleData.positions.push_back(neck_yaw_input->get(0).asFloat64());
+			walkingModuleData.jointNames.push_back(neck_joint_name);
+		}
+		else
+		{
+			walkingModuleData.positions.push_back(0.0);
+			walkingModuleData.jointNames.push_back(neck_joint_name);
+		}
+
 		mu.push_back(this->manipulability);
 		
 		for(int i = 0; i < this->numJoints; i++)
