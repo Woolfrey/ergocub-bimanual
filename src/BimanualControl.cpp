@@ -765,7 +765,7 @@ void BimanualControl::run()
 		
 		// Input the data
 
-		yarp::os::Bottle *neck_yaw_input = this->neckYawReferences.read();
+		/*yarp::os::Bottle *neck_yaw_input = this->neckYawReferences.read();
 		std::string neck_joint_name = "neck_yaw"s;
 		if(neck_yaw_input!=nullptr)
 		{
@@ -776,7 +776,7 @@ void BimanualControl::run()
 		{
 			walkingModuleData.positions.push_back(0.0);
 			walkingModuleData.jointNames.push_back(neck_joint_name);
-		}
+		}*/
 
 		mu.push_back(this->manipulability);
 		
